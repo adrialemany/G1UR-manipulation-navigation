@@ -1,0 +1,6 @@
+build/
+install/
+log/
+rosbags/
+__pycache__/
+*.pyc
