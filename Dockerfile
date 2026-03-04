@@ -42,7 +42,19 @@ RUN apt-get update && apt-get install -y \
     ros-humble-navigation2 \
     ros-humble-nav2-bringup \
     ros-humble-moveit \
+    # --- DEPENDENCIAS PARA SLAM 3D (FAST-LIO) ---
+    libpcl-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Descargar, compilar e instalar Livox SDK2 (Requisito para el LiDAR)
+WORKDIR /root
+RUN git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
+    cd Livox-SDK2 && \
+    mkdir build && cd build && \
+    cmake .. && make -j && \
+    make install && \
+    # Limpiamos el código fuente para no engordar la imagen Docker a lo tonto
+    rm -rf /root/Livox-SDK2
 
 RUN rosdep update
 
