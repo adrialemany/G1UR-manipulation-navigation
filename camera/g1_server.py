@@ -2,6 +2,7 @@ import sys, os, time, socket, threading, zmq, subprocess
 import cv2
 import numpy as np
 import sounddevice as sd
+from gtts import gTTS
 
 # Configuración de Audio
 AUDIO_DEVICE = "hw:0,0" # Basado en tu arecord -l (C270 Webcam)
@@ -113,13 +114,29 @@ def main():
                     if cmd.startswith('speak:'):
                         phrase = cmd.split(':', 1)[1].strip()
                         if phrase.lower() == "jumpscare":
-                            # Lógica Jumpscare simplificada
+                            # Lògica Jumpscare existent
                             audio_sdk.SetVolume(50)
                             subprocess.run(["ffmpeg", "-y", "-i", JUMPSCARE_PATH, "-f", "s16le", "-ar", "16000", "-ac", "1", "temp.pcm"])
                             with open("temp.pcm", "rb") as f:
                                 audio_sdk.PlayStream(f"j_{int(time.time())}", "1", f.read())
                         else:
-                            audio_sdk.TtsMaker(phrase, 1)
+                            # NOVA LÒGICA PER A CASTELLÀ
+                            try:
+                                # Generem l'àudio en castellà ('es')
+                                tts = gTTS(text=phrase, lang='es')
+                                tts.save("temp_tts.mp3")
+                                
+                                # Convertim a format PCM compatible amb el robot (16000Hz, mono)
+                                subprocess.run(["ffmpeg", "-y", "-i", "temp_tts.mp3", "-f", "s16le", "-ar", "16000", "-ac", "1", "temp_tts.pcm"], 
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                
+                                # Enviem el fitxer PCM al reproductor del robot
+                                with open("temp_tts.pcm", "rb") as f:
+                                    audio_sdk.PlayStream(f"tts_{int(time.time())}", "1", f.read())
+                            except Exception as e:
+                                print(f"Error generant TTS en castellà: {e}")
+                                # Fallback a la veu nativa en cas d'error
+                                audio_sdk.TtsMaker(phrase, 1)
                     elif cmd == 'zero': loco.ZeroTorque()
                     elif cmd == 'damp': loco.Damp()
                     elif cmd == 'stand': loco.Squat2StandUp()
