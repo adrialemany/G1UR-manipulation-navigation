@@ -323,6 +323,38 @@ class G1PerfectIK:
             send_walk_cmd('s')
             time.sleep(0.5)
             send_walk_cmd('stop')
+            
+        elif emotion == "DANCE":
+            # ── COREOGRAFÍA SIMULADA ──
+            # Mezclamos comandos de locomoción (piernas) con cinemática inversa (brazos)
+            
+            pose_arriba = [-1.5, 0.5, 0.0, -1.5, 0.0, 0.0, 0.0]  # Brazos bien altos
+            pose_abajo = [0.2, 0.6, 0.0, -0.5, 1.57, 0.0, 0.0]   # Brazos bajos y palmas arriba
+            pose_giro = [-0.2, 1.2, 0.0, -2.0, 0.0, -0.5, 0.0]   # Pose de "gimnasta" para el giro
+            
+            # 1. Bucle de "Groove" (Paso a la izquierda y a la derecha)
+            for _ in range(2):
+                # Paso lateral izquierda + Brazos arriba
+                send_walk_cmd('a') 
+                self.move_to_pose(pose_arriba, duration=0.6)
+                self.wait_until_reached()
+                
+                # Paso lateral derecha + Brazos abajo
+                send_walk_cmd('d')
+                self.move_to_pose(pose_abajo, duration=0.6)
+                self.wait_until_reached()
+
+            # 2. El Giro Final (Spin)
+            send_walk_cmd('stop')
+            time.sleep(0.1)
+            send_walk_cmd('q') # Comenzar a rotar sobre sí mismo
+            self.move_to_pose(pose_giro, duration=1.2)
+            self.wait_until_reached()
+            
+            # 3. Terminar con estilo y volver a casa
+            send_walk_cmd('stop')
+            self.move_to_home(duration=1.0)
+            self.wait_until_reached()
 
     def udp_listener_loop(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -338,7 +370,7 @@ class G1PerfectIK:
             try:
                 data, addr = server_socket.recvfrom(1024)
                 cmd = data.decode('utf-8').strip().upper()
-                if cmd in ["HAPPY", "NEUTRAL", "FRUSTRATED", "SAD", "ANGRY"]:
+                if cmd in ["HAPPY", "NEUTRAL", "FRUSTRATED", "SAD", "ANGRY", "DANCE"]:
                     print(f"📥 Emoción recibida desde {addr}: {cmd}")
                     self.play_emotion(cmd)
             except Exception as e:
@@ -477,10 +509,10 @@ if __name__ == '__main__':
         print("="*50)
         
         while True:
-            cmd = input("\n> Ingresa emoción (HAPPY, NEUTRAL, FRUSTRATED, SAD, ANGRY) o 'q' para salir: ").strip().upper()
+            cmd = input("\n> Ingresa emoción (HAPPY, NEUTRAL, FRUSTRATED, SAD, ANGRY, DANCE) o 'q' para salir: ").strip().upper()
             if cmd == 'Q':
                 break
-            elif cmd in ["HAPPY", "NEUTRAL", "FRUSTRATED", "SAD", "ANGRY"]:
+            elif cmd in ["HAPPY", "NEUTRAL", "FRUSTRATED", "SAD", "ANGRY", "DANCE"]:
                 node.play_emotion(cmd)
             else:
                 print("[ERROR] Comando no reconocido. Inténtalo de nuevo.")
