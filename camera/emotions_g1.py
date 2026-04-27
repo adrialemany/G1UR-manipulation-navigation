@@ -8,18 +8,13 @@ import json
 import socket
 import threading
 
-os.environ["CYCLONEDDS_URI"] = """<CycloneDDS>
-    <Domain>
-        <SharedMemory>
-            <Enable>false</Enable>
-        </SharedMemory>
-    </Domain>
-</CycloneDDS>"""
-
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from unitree_hg.msg import LowCmd, LowState
 
 def send_walk_cmd(cmd):
+    """S'assumeix que hi ha un servidor de locomoció TCP en el port 6000 del robot"""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(('127.0.0.1', 6000))
@@ -28,10 +23,14 @@ def send_walk_cmd(cmd):
         s.close()
     except: pass
 
-class G1PerfectIK:
+class G1PhysicalEmotions(Node):
     def __init__(self):
+        super().__init__('g1_physical_emotions')
+        
         self.NOT_USED_JOINT = 29 
-        self.dt = 0.02
+        self.kp = 60.0
+        self.kd = 1.5
+        self.dt = 0.02 # 50Hz
         
         self.g1_arm_left = [15, 16, 17, 18, 19, 20, 21]
         self.g1_arm_right = [22, 23, 24, 25, 26, 27, 28] 
@@ -50,11 +49,17 @@ class G1PerfectIK:
         self.wrist_roll_offset = 0.0
         self.current_wrist_offset = 0.0 
         
+        # ROS 2 Pub/Sub
+        self.cmd_pub = self.create_publisher(LowCmd, '/arm_sdk', 10)
+        self.state_sub = self.create_subscription(LowState, '/lowstate', self.state_callback, qos_profile_sensor_data)
+        self.state_received = False
+        self.tick_count = 0
+
         self.safe_zone = self.load_safe_zone("left_arm_safe_zone.json")
         
         self.joint_safety_limits = {
             15: (-3.04, 2.62), 16: (-1.54, 2.20), 17: (-2.57, 2.57),
-            18: (-1.00, 2.04), 19: (-1.92, 1.92), 20: (-1.56, 1.56),
+            18: (-2.04, 2.04), 19: (-1.92, 1.92), 20: (-1.56, 1.56),
             21: (-1.56, 1.56)
         }
         
@@ -75,7 +80,7 @@ class G1PerfectIK:
             self.data = self.model.createData()
             self.hand_frame_id = self.model.getFrameId("left_rubber_hand")
         except Exception as e:
-            print(f"Error cargando URDF: {e}")
+            self.get_logger().error(f"Error cargant URDF: {e}")
             self.model = None
 
         self.arm_names = [
@@ -97,35 +102,26 @@ class G1PerfectIK:
                     self.arm_v_indices.append(v_idx)
 
         self.q_math = pin.neutral(self.model)
-        self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.target_address = ('127.0.0.1', 9876)
-        self.state_received = False
-        self.tick_count = 0
-        
-        ChannelFactoryInitialize(1, "lo") 
-        self.sub = ChannelSubscriber("rt/lowstate", LowState_)
-        self.sub.Init(self.state_callback, 10)
-        
-        print("[INFO] Esperando estado de la simulación...")
+        print("[INFO] Esperant estat del robot físic...")
 
     def load_safe_zone(self, file_path):
         if not os.path.exists(file_path):
-            print(f"Aviso: No hay {file_path}. Usando límites genéricos.")
+            print(f"Aviso: No hi ha {file_path}. Utilitzant límits genèrics.")
             return {'x_min': -1.0, 'x_max': 1.0, 'y_min': -1.0, 'y_max': 1.0, 'z_min': -1.0, 'z_max': 1.0}
         with open(file_path, 'r') as f:
             zone = json.load(f)
-        print("✅ Zona segura cargada.")
+        print("✅ Zona segura carregada.")
         return zone
 
-    def state_callback(self, msg: LowState_):
+    def state_callback(self, msg):
         self.tick_count += 1
-        if self.tick_count < 150: 
-            return
-            
+        
+        # Copiem l'estat actual dels motors directament des del missatge ROS 2
         for i in range(29):
-            self.current_jpos[i] = msg.motor_state[i].q
+            if i < len(msg.motor_state):
+                self.current_jpos[i] = msg.motor_state[i].q
             
-        if not self.state_received:
+        if not self.state_received and self.tick_count > 20: 
             self.state_received = True
             self.sync_math_with_reality()
             
@@ -135,7 +131,7 @@ class G1PerfectIK:
             self.active_ik = True
             self.current_target_xyz = self.home_xyz.copy()
             
-            print("[INFO] Posición natural capturada. Emociones listas.")
+            print("[INFO] Posició natural capturada. Emocions llestes.")
             threading.Thread(target=self.control_loop, daemon=True).start()
             threading.Thread(target=self.udp_listener_loop, daemon=True).start()
             
@@ -249,10 +245,9 @@ class G1PerfectIK:
             time.sleep(0.02)
 
     def play_emotion(self, emotion):
-        print(f"\n🎭 Reproduciendo emoción: {emotion}")
+        print(f"\n🎭 Reproduint emoció: {emotion}")
         
         if emotion == "HAPPY":
-            # Restaurado a XYZ con duraciones ajustadas a la fluidez
             self.move_to([0, 0.45, 0.53], duration=0.4)
             self.wait_until_reached()
             self.move_to([0, 0.26, 0.63], duration=0.4)
@@ -268,13 +263,11 @@ class G1PerfectIK:
             pose_izq = [0.6, 0.3, 0.9, -1.5, -1.8, -0.2, 1.0]
             self.move_to_pose(pose_izq, duration=1.5)
             self.wait_until_reached()
-            
             time.sleep(3.0)
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
             
         elif emotion == "FRUSTRATED":
-            # Restaurado a XYZ
             self.move_to([0.1, 0.17, 0.4], duration=0.8) 
             self.wait_until_reached()
             time.sleep(4.0) 
@@ -282,7 +275,6 @@ class G1PerfectIK:
             self.wait_until_reached()
             
         elif emotion == "SAD":
-            # Restaurado a XYZ
             self.move_to([0.15, 0.06, 0.4], duration=0.8)
             self.wait_until_reached()
             time.sleep(4.0) 
@@ -294,71 +286,54 @@ class G1PerfectIK:
             time.sleep(0.5)
             send_walk_cmd('stop')
             
-            # 1. PRIMERO: Llegar progresivamente a la postura base de enfado (guardia alta)
-            # Hombros hacia adelante (-0.8), un poco abiertos (0.3), y codo medio doblado (0.5)
             pose_guardia = [-0.8, 0.3, 0.0, -0.4, 0.0, 0.0, 0.0]
             self.move_to_pose(pose_guardia, duration=0.8)
             self.wait_until_reached()
             
-            # 2. Creamos las poses de "bombeo" basándonos EXACTAMENTE en esa guardia,
-            # alterando únicamente el valor del codo (índice 3 de la lista).
             pose_codo_flexionado = list(pose_guardia)
-            pose_codo_flexionado[3] = -1.0  # Dobla el codo hacia arriba (el límite es 2.04)
+            pose_codo_flexionado[3] = -1.0  
             
             pose_codo_extendido = list(pose_guardia)
-            pose_codo_extendido[3] = -0.4   # Extiende el codo (vuelve a la guardia)
+            pose_codo_extendido[3] = -0.4   
 
-            # 3. Ejecutamos el bucle "bombeando" solo el codo
             for _ in range(3):
                 self.move_to_pose(pose_codo_flexionado, duration=0.5)
                 self.wait_until_reached()
-                
                 self.move_to_pose(pose_codo_extendido, duration=0.5)
                 self.wait_until_reached()
                 
-            # 4. Finalizamos volviendo a casa
             self.move_to_home(duration=1.0)
             self.wait_until_reached()
-            
             send_walk_cmd('s')
             time.sleep(0.5)
             send_walk_cmd('stop')
             
         elif emotion == "DANCE":
-            # ── COREOGRAFÍA SIMULADA ──
-            # Mezclamos comandos de locomoción (piernas) con cinemática inversa (brazos)
+            pose_arriba = [-1.5, 0.5, 0.0, -1.5, 0.0, 0.0, 0.0]  
+            pose_abajo = [0.2, 0.6, 0.0, -0.5, 1.57, 0.0, 0.0]   
+            pose_giro = [-0.2, 1.2, 0.0, -2.0, 0.0, -0.5, 0.0]   
             
-            pose_arriba = [-1.5, 0.5, 0.0, -1.5, 0.0, 0.0, 0.0]  # Brazos bien altos
-            pose_abajo = [0.2, 0.6, 0.0, -0.5, 1.57, 0.0, 0.0]   # Brazos bajos y palmas arriba
-            pose_giro = [-0.2, 1.2, 0.0, -2.0, 0.0, -0.5, 0.0]   # Pose de "gimnasta" para el giro
-            
-            # 1. Bucle de "Groove" (Paso a la izquierda y a la derecha)
             for _ in range(2):
-                # Paso lateral izquierda + Brazos arriba
                 send_walk_cmd('a') 
                 self.move_to_pose(pose_arriba, duration=0.6)
                 self.wait_until_reached()
                 
-                # Paso lateral derecha + Brazos abajo
                 send_walk_cmd('d')
                 self.move_to_pose(pose_abajo, duration=0.6)
                 self.wait_until_reached()
 
-            # 2. El Giro Final (Spin)
             send_walk_cmd('stop')
             time.sleep(0.1)
-            send_walk_cmd('q') # Comenzar a rotar sobre sí mismo
+            send_walk_cmd('q') 
             self.move_to_pose(pose_giro, duration=1.2)
             self.wait_until_reached()
             
-            # 2.5 El Giro Final (Spin)
             send_walk_cmd('stop')
             time.sleep(0.1)
-            send_walk_cmd('e') # Comenzar a rotar sobre sí mismo
+            send_walk_cmd('e') 
             self.move_to_pose(pose_giro, duration=1.2)
             self.wait_until_reached()
             
-            # 3. Terminar con estilo y volver a casa
             send_walk_cmd('stop')
             self.move_to_home(duration=1.0)
             self.wait_until_reached()
@@ -368,9 +343,9 @@ class G1PerfectIK:
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
         try:
             server_socket.bind(('0.0.0.0', 5005))
-            print("[INFO] 🎧 Escuchando emociones por red en el puerto 5005...")
+            print("[INFO] 🎧 Escoltant emocions per xarxa en el port 5005...")
         except Exception as e:
-            print(f"[ERROR] No se pudo hacer bind en el puerto 5005: {e}")
+            print(f"[ERROR] No s'ha pogut fer bind al port 5005: {e}")
             return
             
         while True:
@@ -378,37 +353,39 @@ class G1PerfectIK:
                 data, addr = server_socket.recvfrom(1024)
                 cmd = data.decode('utf-8').strip().upper()
                 if cmd in ["HAPPY", "NEUTRAL", "FRUSTRATED", "SAD", "ANGRY", "DANCE"]:
-                    print(f"📥 Emoción recibida desde {addr}: {cmd}")
+                    print(f"📥 Emoció rebuda des de {addr}: {cmd}")
                     self.play_emotion(cmd)
             except Exception as e:
-                print(f"Error recibiendo comando: {e}")
+                print(f"Error rebent comanda: {e}")
 
     def control_loop(self):
-        while True:
+        """Bucle de control de publicació directa cap al robot físic (sense UDP UDP)."""
+        while rclpy.ok():
             t_start = time.time()
             if not self.state_received or self.model is None: 
                 time.sleep(self.dt)
                 continue
 
+            cmd_msg = LowCmd()
+            
+            # Si la IK no està activa, desactivem el mode d'anul·lació dels braços
             if not self.active_ik:
-                try:
-                    self.udp_sock.sendto(json.dumps({}).encode('utf-8'), self.target_address)
-                except Exception:
-                    pass
+                cmd_msg.motor_cmd[self.NOT_USED_JOINT].q = 0.0
+                self.cmd_pub.publish(cmd_msg)
                 time.sleep(self.dt)
                 continue
                 
             if hasattr(self, 'wrist_trajectory') and self.wrist_trajectory:
                 self.current_wrist_offset = self.wrist_trajectory.pop(0)
 
-            # MODO 1: POSE DIRECTA O HOME (Totalmente suave, sin fallos)
+            # MODO 1: POSE DIRECTA O HOME (Articular pur)
             if self.trajectory_q:
                 self.q_math = self.trajectory_q.pop(0)
                 pin.forwardKinematics(self.model, self.data, self.q_math)
                 pin.updateFramePlacements(self.model, self.data)
                 self.hand_xyz_actual = self.data.oMf[self.hand_frame_id].translation
                 
-            # MODO 2: CARTESIAN IK (Para emociones basadas en XYZ)
+            # MODO 2: CARTESIAN IK (Basat en XYZ)
             elif self.current_target_xyz is not None:
                 if self.trajectory_points:
                     self.current_target_xyz = self.trajectory_points.pop(0)
@@ -460,9 +437,7 @@ class G1PerfectIK:
                     for i, v_idx in enumerate(self.arm_v_indices):
                         dq[v_idx] = dq_arm[i]
 
-                # ── PROTECCIÓN FÍSICA ANTI-TIRONES VECTORIAL ──
-                # Mantiene la dirección de la ruta recta, escalando el vector completo 
-                # en lugar de "cortar" ejes individuales.
+                # ESCUT ANTI-TIRONADES VECTORIAL FÍSIC
                 max_vel = 8.0 
                 max_dq = np.max(np.abs(dq))
                 if max_dq > max_vel:
@@ -470,8 +445,6 @@ class G1PerfectIK:
 
                 q_math_future = pin.integrate(self.model, self.q_math, dq * self.dt)
 
-                # ── LIMITADOR ARTICULAR SUAVE ──
-                # Si llega al límite, se desliza por el borde en lugar de abortar la memoria.
                 for q_idx, g1_idx in self.pin_to_g1_q.items():
                     if g1_idx in self.joint_safety_limits:
                         min_q, max_q = self.joint_safety_limits[g1_idx]
@@ -483,6 +456,17 @@ class G1PerfectIK:
             for q_idx, g1_idx in self.pin_to_g1_q.items():
                 comandos_brazos[g1_idx] = float(self.q_math[q_idx])
             
+            # --- CONSTRUCCIÓ DEL MISSATGE PER AL ROBOT FÍSIC ---
+            
+            # 1. Omplim tots els motors inicialment de forma transparent
+            for j in range(29):
+                cmd_msg.motor_cmd[j].q = self.current_jpos[j]
+                cmd_msg.motor_cmd[j].dq = 0.0
+                cmd_msg.motor_cmd[j].tau = 0.0
+                cmd_msg.motor_cmd[j].kp = 0.0  # Per defecte no interferim amb les cames
+                cmd_msg.motor_cmd[j].kd = 0.0
+            
+            # 2. Apliquem les comandes calculades A NOMÉS ALS BRAÇOS
             for i in range(7):
                 left_motor_id = self.g1_arm_left[i]
                 right_motor_id = self.g1_arm_right[i]
@@ -493,37 +477,63 @@ class G1PerfectIK:
                     min_q, max_q = self.joint_safety_limits[19]
                     left_angle = max(min_q, min(max_q, left_angle))
                     
-                if i in [1, 2, 4, 6]:
-                    comandos_brazos[right_motor_id] = -left_angle
+                if i in [1, 2, 4, 6]: # Mode espill màgic
+                    right_angle = -left_angle
                 else:
-                    comandos_brazos[right_motor_id] = left_angle
-            
-            try:
-                self.udp_sock.sendto(json.dumps(comandos_brazos).encode('utf-8'), self.target_address)
-            except Exception:
-                pass
+                    right_angle = left_angle
+                
+                # Braç Esquerre
+                cmd_msg.motor_cmd[left_motor_id].q = left_angle
+                cmd_msg.motor_cmd[left_motor_id].kp = self.kp
+                cmd_msg.motor_cmd[left_motor_id].kd = self.kd
+                
+                # Braç Dret
+                cmd_msg.motor_cmd[right_motor_id].q = right_angle
+                cmd_msg.motor_cmd[right_motor_id].kp = self.kp
+                cmd_msg.motor_cmd[right_motor_id].kd = self.kd
+
+            # Activem l'API de control de braços del robot
+            cmd_msg.motor_cmd[self.NOT_USED_JOINT].q = 1.0
+            self.cmd_pub.publish(cmd_msg)
 
             time.sleep(max(0.0, self.dt - (time.time() - t_start)))
 
-if __name__ == '__main__':
-    node = G1PerfectIK()
+def main(args=None):
+    rclpy.init(args=args)
+    node = G1PhysicalEmotions()
+    
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+    thread = threading.Thread(target=executor.spin, daemon=True)
+    thread.start()
+    
     try:
         while not node.state_received or node.home_xyz is None:
             time.sleep(0.1)
             
         print("\n" + "="*50)
-        print("🤖 CONTROL DE EMOCIONES INICIADO 🤖")
+        print("🤖 CONTROL D'EMOCIONS FÍSIC INICIAT 🤖")
         print("="*50)
         
         while True:
-            cmd = input("\n> Ingresa emoción (HAPPY, NEUTRAL, FRUSTRATED, SAD, ANGRY, DANCE) o 'q' para salir: ").strip().upper()
+            cmd = input("\n> Introdueix emoció (HAPPY, NEUTRAL, FRUSTRATED, SAD, ANGRY, DANCE) o 'q' per eixir: ").strip().upper()
             if cmd == 'Q':
                 break
             elif cmd in ["HAPPY", "NEUTRAL", "FRUSTRATED", "SAD", "ANGRY", "DANCE"]:
                 node.play_emotion(cmd)
             else:
-                print("[ERROR] Comando no reconocido. Inténtalo de nuevo.")
+                print("[ERROR] Comanda no reconeguda. Torna-ho a intentar.")
                 
     except KeyboardInterrupt:
-        print("\nSaliendo...")
+        pass
+    finally:
+        print("\nAlliberant braços del robot...")
+        cmd_msg = LowCmd()
+        cmd_msg.motor_cmd[node.NOT_USED_JOINT].q = 0.0
+        node.cmd_pub.publish(cmd_msg)
+        time.sleep(0.5)
+        rclpy.shutdown()
         os._exit(0)
+
+if __name__ == '__main__':
+    main()
