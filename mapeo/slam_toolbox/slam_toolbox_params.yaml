@@ -1,0 +1,97 @@
+# =====================================================================
+# slam_toolbox_params.yaml
+# Configuración de SLAM Toolbox (online async) para Unitree G1 en MuJoCo
+#
+# Modo: online_async  → construye el mapa en tiempo real y hace cierre
+#       de bucle (loop closure) automáticamente al detectar zonas ya
+#       visitadas.
+#
+# Topics esperados (publicados por mujoco_ros2_lidar_bridge.py):
+#   /scan   → sensor_msgs/LaserScan  (frame: lidar_link, 10 Hz, 360 rays)
+#   /odom   → nav_msgs/Odometry      (frame odom → base_link)
+#   /tf     → odom → base_link → lidar_link
+# =====================================================================
+
+slam_toolbox:
+  ros__parameters:
+
+    # ----- Modo de operación -----
+    # online_async: corre en un hilo separado, procesa scans tan rápido
+    # como puede sin bloquear el hilo de ROS.
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ----- Topics y frames -----
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping           # "mapping" para construir mapa, "localization" para solo localizar
+
+    # ----- Tiempo -----
+    # Desactivamos use_sim_time porque la sim corre en tiempo real
+    use_sim_time: false
+
+    # ----- Parámetros del mapa -----
+    map_file_name: ""           # vacío → no cargar mapa previo (modo mapping puro)
+    map_start_at_dock: false
+
+    # Resolución del mapa en m/celda (igual que el mapper actual)
+    resolution: 0.05
+    max_laser_range: 12.0       # debe coincidir con LIDAR_MAX_RANGE del bridge
+
+    # ----- Loop closure -----
+    # Busca candidatos de loop closure cada N scans
+    loop_search_space_dimension: 8.0      # radio de búsqueda en metros
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_fine:   0.45
+    loop_match_maximum_variance_fine:   0.5
+
+    # Cuántos scans almacenar para detección de loop
+    stack_size_to_use: 40000000   # ~40 MB de buffer de scans
+
+    # ----- Criterios de inserción de nuevos nodos en el grafo -----
+    # Inserta nuevo nodo si el robot se mueve más de X metros o Y radianes
+    minimum_travel_distance: 0.3   # metros
+    minimum_travel_heading: 0.3    # radianes (~17°)
+
+    # Cuántos scans entre nodos consecutivos del grafo
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 10.0
+
+    # ----- Correlación (emparejamiento de scans) -----
+    # Ventana de búsqueda para el scan matcher lineal
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+
+    # Ventana de búsqueda para loop closure (más grande)
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # ----- Pose graph -----
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+    fine_search_angle_offset: 0.00349     # ~0.2°
+    coarse_search_angle_offset: 0.349     # ~20°
+    coarse_angle_resolution: 0.0349      # ~2°
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+
+    # ----- Throttle (evita saturar CPU) -----
+    # Si el robot está quieto, no inserta scans
+    do_loop_closing: true
+    throttle_scans: 1               # procesar 1 de cada N scans (1 = todos)
+
+    # ----- Serialización / guardado -----
+    # Guarda el mapa como .pgm + .yaml igual que el mapper actual
+    # Usar: ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: 'mi_mapa'}}"
+    # O guardar en formato nativo (.posegraph) para reanudar:
+    # ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: {data: '/ruta/mi_mapa'}}"

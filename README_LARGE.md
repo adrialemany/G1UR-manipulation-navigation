@@ -75,13 +75,18 @@ proyecto/
 │   │   ├── unitree_mujoco.py         # Motor de física + LiDAR + streams ZMQ
 │   │   ├── unitree_sdk2py_bridge.py  # Traductor MuJoCo ↔ Unitree DDS
 │   │   ├── mujoco_ros2_lidar_bridge.py  # Bridge ZMQ → ROS 2
-│   │   ├── mujoco_slam_mapper.py     # Mapeador de ocupación (SLAM casero)
-│   │   ├── run_sim_ai_g1.py          # ENTRY POINT principal
-│   │   └── meshes/                   # 50+ mallas STL del G1
+│   │   └── run_sim_ai_g1.py          # ENTRY POINT principal
 │   ├── creator_editor/
 │   │   ├── image_to_mujoco.py        # Conversor plano → XML MuJoCo (GUI)
 │   │   └── limpiar_plano.py          # Pre-procesado de PDFs de planta
 │   └── worlds/tibuilding/            # Mundo 3D del edificio TI (meshes DAE/OBJ)
+├── mapeo/
+│   ├── mapper_custom/
+│   │   └── mujoco_slam_mapper.py     # Mapeador de ocupación (SLAM casero, sin loop closure)
+│   └── slam_toolbox/
+│       ├── g1_slam.launch.py         # Launch file SLAM Toolbox (online_async)
+│       ├── slam_toolbox_params.yaml  # Configuración Ceres solver + loop closure
+│       └── README.md                 # Documentación y comparativa
 ├── navegacion/
 │   ├── nav2/
 │   │   ├── nav2_params.yaml          # Configuración completa Nav2
@@ -94,7 +99,8 @@ proyecto/
 │   └── g1_client_mujoco.py           # Cliente GUI de teleoperación
 ├── rviz2/
 │   ├── navigation.rviz               # Config RViz2 para navegación completa
-│   ├── g1_mapping.rviz               # Config RViz2 para SLAM
+│   ├── g1_mapping.rviz               # Config RViz2 para mapper_custom (frame: odom)
+│   ├── g1_slam.rviz                  # Config RViz2 para SLAM Toolbox (frame: map)
 │   └── g1_teleop.rviz                # Config RViz2 para teleop
 └── maps/
     ├── maze_map_*.pgm / *.yaml       # Mapas guardados del laberinto
@@ -301,16 +307,24 @@ graph TD
 
 ### Árbol TF2
 
-TF2 (*Transform Framework 2*) es el sistema de ROS 2 para gestionar transformadas de coordenadas entre marcos de referencia. El árbol en este proyecto es:
+TF2 (*Transform Framework 2*) es el sistema de ROS 2 para gestionar transformadas de coordenadas entre marcos de referencia. El árbol varía según el modo de operación:
 
+**Con mapper_custom o sin SLAM activo:**
 ```
-map
- └── odom          ← publicado por AMCL (map → odom)
-      └── base_link ← publicado por mujoco_lidar_bridge (pose del pelvis)
-           └── lidar_link ← publicado por mujoco_lidar_bridge (pose relativa del LiDAR)
+odom
+ └── base_link  ← publicado por mujoco_lidar_bridge (pose del pelvis)
+      └── lidar_link  ← publicado por mujoco_lidar_bridge (pose relativa del LiDAR)
 ```
 
-**Nota crítica**: Cuando Nav2 no está activo (exploración con SLAM), el frame raíz es `odom` directamente — no existe `map`. El nodo bridge **no publica** `world → odom` estático para evitar árboles TF desconectados al añadir AMCL posteriormente.
+**Con SLAM Toolbox o Nav2 (AMCL) activos:**
+```
+map            ← publicado por SLAM Toolbox o AMCL
+ └── odom
+      └── base_link
+           └── lidar_link
+```
+
+**Nota crítica**: el nodo bridge **no publica** `world → odom` estático para evitar árboles TF desconectados al añadir AMCL o SLAM Toolbox posteriormente.
 
 ---
 
@@ -359,18 +373,50 @@ $ python3 mujoco_ros2_lidar_bridge.py
 > **[INSERTAR CAPTURA DE RVIZ2 AQUÍ — Vista de mapping]**  
 > *El usuario debería ver: el robot G1 representado como un rectángulo en el centro, la nube de puntos roja del LiDAR a su alrededor, y la occupancy grid (mapa) creciendo en tiempo real mientras el robot se desplaza. El Fixed Frame debe estar en "odom".*
 
-### Fase 3 — SLAM (mapeado sin localización previa)
+### Fase 3 — SLAM (mapeado)
+
+Hay dos modos de operación para construir el mapa. Ver también la [comparativa completa](#mapeo--comparativa-de-alternativas).
+
+#### 3A — Mapper custom (`mapeo/mapper_custom/mujoco_slam_mapper.py`)
 
 ```
-$ python3 mujoco_slam_mapper.py
+$ cd mapeo/mapper_custom && python3 mujoco_slam_mapper.py
 ```
 
-El mapeador implementa **occupancy grid mapping** basado en log-odds (sin filtro de partículas — es un SLAM dead-reckoning puro):
+Implementa **occupancy grid mapping** basado en log-odds (sin filtro de partículas — es un SLAM dead-reckoning puro):
 
 - **Log-odds**: cada celda almacena un valor `L ∈ [-5, 5]`. Se actualiza con `L_FREE = -0.4` (rayo libre) y `L_OCC = 0.85` (impacto detectado). La asimetría favorece marcar obstáculos sobre marcarlos libres.
 - **Algoritmo de Bresenham**: traza líneas en el grid entre el robot y cada punto LiDAR para marcar celdas libres.
 - **Grid dinámico**: el mapa crece automáticamente en cualquier dirección si el robot sale de los límites actuales.
 - Al pulsar `m`, guarda el mapa como `.pgm` + `.yaml` en `maps/`.
+
+El mapa se publica en el frame `odom` → usar `rviz2/g1_mapping.rviz`.
+
+#### 3B — SLAM Toolbox (`mapeo/slam_toolbox/g1_slam.launch.py`)
+
+```
+$ ros2 launch mapeo/slam_toolbox/g1_slam.launch.py
+```
+
+Nodo C++ `async_slam_toolbox_node` que corre en un hilo separado y procesa scans tan rápido como puede sin bloquear el hilo de ROS. A diferencia del mapper custom:
+
+- **Loop closure automático**: al detectar que el robot ha vuelto a una zona ya visitada, el solver Ceres optimiza el grafo de poses completo y corrige la deriva acumulada.
+- **Formato nativo**: además de `.pgm/.yaml`, puede serializar el grafo de poses (`.posegraph + .data`) para reanudar la sesión de mapeo en otro momento.
+- **Modo localización**: con un `.posegraph` previo, puede usarse solo para localizarse sin reconstruir el mapa.
+
+El mapa se publica en el frame `map` (SLAM Toolbox añade el transform `map → odom`) → usar `rviz2/g1_slam.rviz`.
+
+**Guardar el mapa:**
+
+```bash
+# PGM+YAML → compatible con Nav2
+ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \
+  "{name: {data: 'maps/mi_mapa'}}"
+
+# Formato nativo → para reanudar SLAM
+ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
+  "{filename: {data: 'maps/mi_mapa'}}"
+```
 
 ### Fase 4 — Navegación Autónoma
 
@@ -478,7 +524,10 @@ Un error aquí causaría que el robot apareciera con orientación incorrecta en 
 ```bash
 # ROS 2 Humble (si no está instalado)
 sudo apt install ros-humble-desktop ros-humble-nav2-bringup \
-    ros-humble-nav2-map-server ros-humble-slam-toolbox
+    ros-humble-nav2-map-server
+
+# SLAM Toolbox (solo si se usa la opción B de mapeo)
+sudo apt install ros-humble-slam-toolbox
 
 # Python
 pip install mujoco onnxruntime zmq numpy opencv-python \
@@ -509,7 +558,6 @@ ENABLE_ELASTIC_BAND = False               # Spring virtual para debug
 cd mujoco/simulacion
 python3 run_sim_ai_g1.py
 ```
-Esto lanza automáticamente `unitree_mujoco.py` como subproceso y muestra el visor MuJoCo.
 
 **Terminal 2 — Bridge ROS 2**:
 ```bash
@@ -518,29 +566,39 @@ cd mujoco/simulacion
 python3 mujoco_ros2_lidar_bridge.py
 ```
 
-**Terminal 3A — SLAM (primera vez, para crear el mapa)**:
+**Terminal 3A — Mapeo con mapper custom**:
 ```bash
 source /opt/ros/humble/setup.bash
-cd mujoco/simulacion
+cd mapeo/mapper_custom
 python3 mujoco_slam_mapper.py
 # Teleop el robot para explorar el laberinto
 # Pulsa 'm' para guardar el mapa en maps/
 ```
+```bash
+rviz2 -d rviz2/g1_mapping.rviz
+```
 
-**Terminal 3B — Navegación autónoma (con mapa ya creado)**:
+**Terminal 3B — Mapeo con SLAM Toolbox (recomendado)**:
+```bash
+source /opt/ros/humble/setup.bash
+ros2 launch mapeo/slam_toolbox/g1_slam.launch.py
+# Guardar: ros2 service call /slam_toolbox/save_map ...
+```
+```bash
+rviz2 -d rviz2/g1_slam.rviz
+```
+
+**Terminal 3C — Navegación autónoma (con mapa ya creado)**:
 ```bash
 source /opt/ros/humble/setup.bash
 ros2 launch navegacion/nav2/g1_nav2.launch.py \
     map:=$(pwd)/maps/maze_map_20260417_103314.yaml
 ```
-
-**Terminal 4 — Visualización**:
 ```bash
-source /opt/ros/humble/setup.bash
 rviz2 -d rviz2/navigation.rviz
 ```
 
-**Terminal 5 (opcional) — Cliente de teleoperación**:
+**Terminal 4 (opcional) — Cliente de teleoperación**:
 ```bash
 python3 teleop/g1_client_mujoco.py
 ```
@@ -559,9 +617,6 @@ ros2 lifecycle list
 
 # Reset del robot (si se cae)
 python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'reset',('127.0.0.1',6005))"
-
-# Guardar mapa manualmente desde el mapper
-# (pulsar 'm' en la terminal del mujoco_slam_mapper.py)
 
 # Enviar goal de navegación por línea de comandos
 ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
@@ -588,10 +643,11 @@ Herramienta GUI independiente que convierte imágenes de planos arquitectónicos
 
 Interfaz GUI completa con:
 - Feed de cámara en vivo a 30 FPS (stream ZMQ puerto 5555).
-- Control WASD+QE por teclado con overlay de estado.
-- Joystick virtual por click+drag.
-- Panel de telemetría: velocidad actual, modo de control (Nav2/Teleop), estado de conexión.
+- Control WASD+QE por teclado con **múltiples teclas simultáneas** y perfiles de velocidad (1/2/3).
+- Joystick virtual por click+drag con rotación analógica.
+- Panel de telemetría: velocímetro Vx/Vy/Wz, modo de control (Nav2/Teleop), estado de conexión, log de eventos.
 - Botón de reset de emergencia (envía UDP al puerto 6005).
+- Tecla `M` para guardar el mapa desde SLAM Toolbox sin salir del cliente.
 
 ---
 
@@ -617,9 +673,25 @@ El crash ocurre durante la activación de `easynav_system`, antes de cualquier n
 
 ### ⚠️ Limitaciones Conocidas
 
-- **SLAM sin loop closure**: el mapeador `mujoco_slam_mapper.py` es dead-reckoning puro. En recorridos largos, el error acumulado de odometría degrada el mapa. Para entornos grandes, considerar integrar `slam_toolbox`.
+- **SLAM sin loop closure (mapper custom)**: el mapeador `mujoco_slam_mapper.py` es dead-reckoning puro. En recorridos largos, el error acumulado de odometría degrada el mapa. Para entornos grandes, usar SLAM Toolbox (`mapeo/slam_toolbox/`).
 - **LiDAR 2D**: el sensor simulado es plano (1 canal de elevación a 0°). No detecta obstáculos por encima o por debajo de su altura de montaje (37 cm sobre el pelvis).
 - **Footprint rectangular**: el footprint de Nav2 (`[[0.14,0.20],[0.14,-0.20],[-0.14,-0.20],[-0.14,0.20]]`) es una aproximación conservadora. Los brazos del G1 extendidos son más anchos, pero un footprint mayor haría que Nav2 no pudiera navegar por pasillos estrechos.
+
+---
+
+## Mapeo — comparativa de alternativas
+
+| Característica           | Mapper custom (`mapper_custom/`)  | SLAM Toolbox (`slam_toolbox/`)    |
+|--------------------------|-----------------------------------|-----------------------------------|
+| Loop closure             | ❌ No                              | ✅ Sí (Ceres solver)               |
+| Corrección de deriva     | ❌ No                              | ✅ Sí (pose graph)                 |
+| Guardar y reanudar sesión| Solo PGM/YAML                     | PGM/YAML + posegraph              |
+| Modo solo localización   | ❌ No                              | ✅ Sí                              |
+| Compatible con Nav2      | ✅ Sí                              | ✅ Sí (nativo)                     |
+| Frame del mapa           | `odom`                            | `map`                             |
+| RViz a usar              | `g1_mapping.rviz`                 | `g1_slam.rviz`                    |
+| Dependencias extra       | Ninguna                           | `ros-humble-slam-toolbox`         |
+| Complejidad              | Baja (Python puro)                | Media (nodo C++)                  |
 
 ---
 

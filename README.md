@@ -11,12 +11,18 @@ g1man/
 ├── teleop/                         # Teleoperación manual del robot
 │   └── g1_client_mujoco.py         # Cliente Tkinter: vídeo + control WASD multi-tecla (TCP:6000)
 │
+├── mapeo/                          # Construcción de mapas (dos alternativas)
+│   ├── mapper_custom/
+│   │   └── mujoco_slam_mapper.py   # Mapper de ocupación casero → guarda en maps/
+│   └── slam_toolbox/
+│       ├── g1_slam.launch.py       # Launch: SLAM Toolbox online_async con loop closure
+│       ├── slam_toolbox_params.yaml# Parámetros del solver Ceres
+│       └── README.md               # Documentación específica de SLAM Toolbox
+│
 ├── navegacion/                     # Todo lo relativo a navegación autónoma
-│   ├── cmd_vel_bridge.py           # Puente genérico /cmd_vel → TCP:6000 (obsoleto, ver nota)
 │   ├── nav2/                       # Stack Nav2 (ROS 2 Humble)
 │   │   ├── g1_nav2.launch.py       # Launch: AMCL + costmaps + planner + BT Navigator
-│   │   ├── nav2_params.yaml        # Parámetros de Nav2 (footprint poligonal del G1)
-│   │   └── nav2_cmd_vel_bridge.py  # Bridge Nav2 (obsoleto, integrado en run_sim_ai_g1.py)
+│   │   └── nav2_params.yaml        # Parámetros de Nav2 (footprint poligonal del G1)
 │   └── easynav/                    # Stack EasyNavigation (ROS 2 Jazzy, Docker)
 │       ├── g1_easynav.launch.py    # Launch para ejecutar dentro del contenedor
 │       ├── config/
@@ -37,9 +43,6 @@ g1man/
 │   │   ├── config.py               # Configuración del simulador (robot, scene, DDS)
 │   │   ├── fastsac_g1_29dof.onnx  # Modelo de locomoción (política SAC)
 │   │   ├── mujoco_ros2_lidar_bridge.py  # Publica /scan, /odom, /tf desde ZMQ
-│   │   ├── mujoco_slam_mapper.py   # Mapper de ocupación casero → guarda en maps/
-│   │   ├── g1_actions.py           # Control de brazos vía UDP:9876
-│   │   ├── vision.py               # Utilidades de visión
 │   │   ├── scene.xml               # Escena MuJoCo (laberinto simple)
 │   │   ├── scene_from_sdf_centered.xml  # Escena MuJoCo (edificio TI)
 │   │   ├── g1_29dof.xml            # Modelo MJCF del robot G1
@@ -59,7 +62,8 @@ g1man/
 │
 └── rviz2/                          # Configuraciones RViz2
     ├── g1_teleop.rviz              # Vista para teleoperación
-    ├── g1_mapping.rviz             # Vista para mapeo SLAM
+    ├── g1_mapping.rviz             # Vista para mapeo con mapper_custom (frame: odom)
+    ├── g1_slam.rviz                # Vista para mapeo con SLAM Toolbox (frame: map)
     ├── navigation.rviz             # Vista para navegación Nav2
     └── g1_easynav.rviz             # Vista para EasyNavigation
 ```
@@ -124,18 +128,36 @@ El cliente soporta **múltiples teclas simultáneas**: `W+D` avanza en diagonal,
 rviz2 -d rviz2/g1_teleop.rviz
 ```
 
-### 3B · Mapeo (SLAM casero)
+### 3B · Mapeo
+
+Hay dos alternativas. Ver la sección **[Mapeo — alternativas](#mapeo--alternativas)** para la comparativa completa.
+
+**Opción rápida — mapper casero (sin dependencias extra):**
 
 ```bash
 # Terminal 3
 source /opt/ros/humble/setup.bash
-cd mujoco/simulacion
+cd mapeo/mapper_custom
 python3 mujoco_slam_mapper.py
 # Pulsa 'm' para guardar el mapa en maps/
 ```
 
 ```bash
 rviz2 -d rviz2/g1_mapping.rviz
+```
+
+**Opción recomendada — SLAM Toolbox (con loop closure):**
+
+```bash
+# Instalación (una vez): sudo apt install ros-humble-slam-toolbox
+
+# Terminal 3
+source /opt/ros/humble/setup.bash
+ros2 launch mapeo/slam_toolbox/g1_slam.launch.py
+```
+
+```bash
+rviz2 -d rviz2/g1_slam.rviz
 ```
 
 ### 3C · Navegación autónoma con Nav2
@@ -145,11 +167,10 @@ rviz2 -d rviz2/g1_mapping.rviz
 ```bash
 # Terminal 3 — stack Nav2 (usa el mapa más reciente de maps/ por defecto)
 source /opt/ros/humble/setup.bash
-cd navegacion/nav2
-ros2 launch g1_nav2.launch.py
+ros2 launch navegacion/nav2/g1_nav2.launch.py
 
 # O con mapa explícito:
-ros2 launch g1_nav2.launch.py map:=/ruta/absoluta/al/mapa.yaml
+ros2 launch navegacion/nav2/g1_nav2.launch.py map:=/ruta/absoluta/al/mapa.yaml
 ```
 
 ```bash
@@ -195,6 +216,59 @@ rviz2 -d rviz2/g1_easynav.rviz
 ```
 
 > **⚠️ Bug conocido:** EasyNav arranca y activa sus nodos correctamente pero lanza un `std::runtime_error: can't compare times with different time sources` en el momento en que intenta procesar el primer scan. Ver `navegacion/easynav/BUG_REPORT.md`.
+
+---
+
+## Mapeo — alternativas
+
+### Mapper custom (`mapeo/mapper_custom/mujoco_slam_mapper.py`)
+
+Mapper propio escrito en Python puro. Sin dependencias extra, sin loop closure. Adecuado para entornos pequeños o pruebas rápidas.
+
+Mientras está activo, teclas en su terminal:
+
+| Tecla | Acción |
+|-------|--------|
+| `m`   | Guardar mapa en `maps/maze_map_TIMESTAMP.pgm/.yaml` |
+| `r`   | Resetear el mapa |
+| `q`   | Salir |
+
+### SLAM Toolbox (`mapeo/slam_toolbox/`)
+
+Nodo C++ con **cierre de bucle automático** (Ceres solver). Corrige la deriva de odometría cuando el robot vuelve a zonas ya visitadas. Genera también el formato nativo `.posegraph` para reanudar sesiones de mapeo.
+
+**Guardar el mapa una vez explorado:**
+
+```bash
+# Formato PGM+YAML → compatible con Nav2 map_server / AMCL
+ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \
+  "{name: {data: 'maps/mi_mapa'}}"
+
+# Formato nativo → permite reanudar el SLAM desde donde lo dejaste
+ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
+  "{filename: {data: 'maps/mi_mapa'}}"
+```
+
+**Modo localización (mapa ya hecho, sin reconstruir):**
+
+```bash
+ros2 launch mapeo/slam_toolbox/g1_slam.launch.py \
+  mode:=localization \
+  map:=maps/mi_mapa     # sin extensión, apunta al .posegraph
+```
+
+### Comparativa
+
+| Característica           | Mapper custom             | SLAM Toolbox              |
+|--------------------------|---------------------------|---------------------------|
+| Loop closure             | ❌ No                      | ✅ Sí (Ceres solver)       |
+| Corrección de deriva     | ❌ No                      | ✅ Sí (pose graph)         |
+| Guardar y reanudar       | Solo PGM/YAML             | PGM/YAML + posegraph      |
+| Modo solo localización   | ❌ No                      | ✅ Sí                      |
+| Compatible con Nav2      | ✅ Sí                      | ✅ Sí (nativo)             |
+| Frame del mapa           | `odom`                    | `map`                     |
+| RViz a usar              | `g1_mapping.rviz`         | `g1_slam.rviz`            |
+| Dependencias extra       | Ninguna                   | `ros-humble-slam-toolbox` |
 
 ---
 

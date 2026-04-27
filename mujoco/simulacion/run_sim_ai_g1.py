@@ -493,19 +493,15 @@ if __name__ == "__main__":
             with _lock:
                 cmd_snap = dict(comandos)
 
-            # ── Heading automático ───────────────────────────────────────────
-            # Si hay movimiento lateral (vy) pero poco yaw explícito,
-            # calculamos el yaw necesario para que el robot mire hacia donde va.
-            # Solo se aplica cuando Nav2 está en control (movimiento omnidireccional).
+            # ── Heading automático (solo Nav2) ──────────────────────────────
+            # Cuando Nav2 controla el robot, convierte vy en yaw para que el
+            # robot mire hacia donde se desplaza (comportamiento omnidireccional).
+            # En teleop manual se desactiva para que A/D sean strafe puro.
             vx = cmd_snap['vx']
             vy = cmd_snap['vy']
             speed_xy = math.sqrt(vx**2 + vy**2)
-            if speed_xy > 0.05 and abs(cmd_snap['yaw']) < 0.1:
-                # Ángulo de movimiento en el frame del robot
-                # Si vx>0, vy>0 → el robot quiere ir adelante-izquierda
-                # Convertimos eso a un yaw proporcional
-                desired_heading = math.atan2(vy, vx)   # radianes, frame robot
-                # Ganancia: cuanto mayor el ángulo, más yaw añadimos
+            if _nav2_is_active() and speed_xy > 0.05 and abs(cmd_snap['yaw']) < 0.1:
+                desired_heading = math.atan2(vy, vx)
                 heading_gain = 1.2
                 cmd_snap['yaw'] = float(np.clip(
                     desired_heading * heading_gain,
