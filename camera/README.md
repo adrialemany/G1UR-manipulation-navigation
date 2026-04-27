@@ -73,20 +73,60 @@ sudo apt install ros-humble-pinocchio
 
 ### Execution
 
-1. **On the Physical Robot**
-Ensure the g1_server.py is running on the robot (see the camera server steps above). Then, run the emotion controller locally:
+1. **Start the Emotion Engine (IK Solver)**
+Depending on your environment, run the corresponding IK engine script. This script opens a background UDP port (5005) waiting for emotion commands.
 
-```bash
-python3 controller.py
-```
-
-The system will automatically look for faces, listen to the audio buffer, predict the emotion, and send the corresponding movement commands to the robot.
-
-2. **In the MuJoCo Simulation**
-If you're testing in simulation, first run the simulation (more on [Mujoco instructions](../mujoco/README.md)), and then run the interactive IK emotion script:
+For simulation:
 
 ```bash
 python3 emotions_g1_mujoco.py
 ```
 
-Once the IK engine syncs with the simulation state, you can manually type an emotion (e.g., HAPPY, ANGRY, FRUSTRATED) in the terminal to see the procedural arm movements executed in real-time in the simulator.
+For the physical robot:
+
+```bash
+python3 emotions_g1.py
+```
+
+*Note*: You can manually test the IK engine by typing an emotion directly into its terminal once it syncs.
+
+2. **Run the AI Inference Controller**
+In a new terminal, start the inference script. The system will look for faces, listen to the audio buffer, predict the emotion, and send the movement commands over the network to the Emotion Engine.
+
+```bash
+python3 controller.py
+```
+**Integrating controller.py via Network**
+
+To ensure the AI inference pipeline (controller.py) can communicate seamlessly with the Procedural Animation Engine (emotions_g1_*.py) regardless of where each script is running (e.g., Inference on a powerful laptop, IK Engine on the robot), we use a standard UDP Socket.
+
+In your controller.py, locate the function where the final emotion string (e.g., "HAPPY", "SAD") is decided. Replace the direct function calls with a simple UDP broadcast targeted at Port 5005.
+
+Python Code Snippet for controller.py:
+
+```python
+import socket
+
+def send_emotion_to_robot(emotion_string, target_ip="127.0.0.1"):
+    """
+    Sends the predicted emotion to the IK Engine via UDP.
+    - target_ip: Use "127.0.0.1" if both scripts run on the same PC.
+                 Use the Robot's IP (e.g., "192.168.1.126") if the IK Engine runs on the G1
+                 and the inference runs on a remote laptop.
+    """
+    UDP_PORT = 5005
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Send the string encoded as bytes
+        sock.sendto(emotion_string.encode('utf-8'), (target_ip, UDP_PORT))
+        sock.close()
+        print(f"[Network] Emotion '{emotion_string}' successfully sent to {target_ip}:{UDP_PORT}")
+    except Exception as e:
+        print(f"[Network Error] Could not send emotion: {e}")
+
+# Example Usage inside your inference loop:
+# predicted_emotion = model.predict(audio_feat, visual_feat)
+# send_emotion_to_robot(predicted_emotion, target_ip="192.168.1.126")
+```
+
+Because the IK Engine is configured with SO_REUSEADDR and binds to 0.0.0.0, it will automatically intercept these network packets and trigger the corresponding procedural animation instantly.
