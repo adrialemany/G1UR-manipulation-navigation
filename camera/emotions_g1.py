@@ -10,6 +10,43 @@ import json
 import os
 import socket
 import sys
+import multiprocessing
+
+# =======================================================================
+# PROCÉS INDEPENDENT PELS LEDS (100% Aïllat de ROS 2)
+# =======================================================================
+def led_worker(queue):
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
+    
+    try:
+        ChannelFactoryInitialize(0, "eth0")
+        audio_client = AudioClient()
+        audio_client.SetTimeout(10.0)
+        audio_client.Init()
+        print("[INFO] 🔴 Connexió amb els LEDs establerta correctament.")
+        # Posem el blanc (Neutral) per defecte a l'inici
+        audio_client.LedControl(255, 255, 255) 
+    except Exception as e:
+        print(f"[ERROR] No s'han pogut inicialitzar els LEDs: {e}")
+        return
+
+    while True:
+        try:
+            cmd = queue.get()
+            if cmd == "QUIT":
+                break
+            elif cmd == "WHITE":  audio_client.LedControl(255, 255, 255) # Neutral
+            elif cmd == "YELLOW": audio_client.LedControl(255, 255, 0)   # Happy
+            elif cmd == "ORANGE": audio_client.LedControl(255, 128, 0)   # Dance
+            elif cmd == "RED":    audio_client.LedControl(255, 0, 0)     # Angry
+            elif cmd == "BLUE":   audio_client.LedControl(0, 0, 255)     # Sad
+            elif cmd == "PURPLE": audio_client.LedControl(255, 0, 255)   # Frustrated
+            elif cmd == "OFF":    audio_client.LedControl(0, 0, 0)       # Apagar
+        except Exception:
+            pass
+
+# =======================================================================
 
 def send_walk_cmd(cmd):
     try:
@@ -21,8 +58,11 @@ def send_walk_cmd(cmd):
     except: pass
 
 class G1PhysicalEmotions(Node):
-    def __init__(self):
+    def __init__(self, led_queue):
         super().__init__('g1_physical_emotions')
+        
+        # Rebem la cua de comunicació amb els LEDs
+        self.led_queue = led_queue
         
         self.NOT_USED_JOINT = 29 
         self.kp = 60.0
@@ -50,7 +90,7 @@ class G1PhysicalEmotions(Node):
         self.hand_xyz_actual = np.zeros(3)
         self.home_xyz = None
         self.home_q_math = None
-        self.home_waist_jpos = [0.0, 0.0, 0.0] # <--- Guardarem la postura de la cintura
+        self.home_waist_jpos = [0.0, 0.0, 0.0]
         self.wrist_roll_offset = 0.0
         self.current_wrist_offset = 0.0 
         
@@ -128,7 +168,6 @@ class G1PhysicalEmotions(Node):
             self.home_xyz = self.hand_xyz_actual.copy()
             self.home_q_math = self.q_math.copy()
             
-            # <--- ACÍ CAPTUREM LA CINTURA RECTA --->
             self.home_waist_jpos = [self.current_jpos[w] for w in self.g1_waist]
             
             self.active_ik = False 
@@ -173,7 +212,6 @@ class G1PhysicalEmotions(Node):
         self.current_target_xyz = None
         
         cmd = LowCmd()
-        # Enviar mode 0 garanteix que l'SDK solta els braços (i la cintura) per complet
         for j in range(29):
             cmd.motor_cmd[j].mode = 0
             
@@ -186,6 +224,7 @@ class G1PhysicalEmotions(Node):
         self.sync_math_with_reality() 
         
         if emotion == "HAPPY":
+            self.led_queue.put("YELLOW") # <-- HAPPY: YELLOW
             pose_up = [0.0, 0.3, 0.2, -1.0, 0.0, 0.0, 0.0]
             pose_next = [-2.5, 0.3, 0.4, -1.0, 0.0, 0.0, 0.0]
             pose_next2 = [-2.5, 0.7, 0.0, 0.4, 0.0, 0.0, 0.0]
@@ -198,8 +237,6 @@ class G1PhysicalEmotions(Node):
             self.wait_until_reached()
             self.move_to_pose(pose_next2, duration=1.5)
             self.wait_until_reached()
-
-
             
             for _ in range(2):
                 self.move_to_pose(pose_wave1, duration=0.7)
@@ -214,12 +251,13 @@ class G1PhysicalEmotions(Node):
             self.move_to_pose(pose_up, duration=1.5)
             self.wait_until_reached()
 
-
             self.move_to_home(duration=1.0)
             self.wait_until_reached()
             self.release_control()
+            self.led_queue.put("WHITE") # Tornar a Neutral al final
             
         elif emotion == "NEUTRAL":
+            self.led_queue.put("WHITE") # <-- NEUTRAL: WHITE
             pose_izq = [0.6, 0.3, 0.9, -1.5, -1.8, -0.2, 1.0]
             self.move_to_pose(pose_izq, duration=1.5)
             self.wait_until_reached()
@@ -230,6 +268,7 @@ class G1PhysicalEmotions(Node):
             self.release_control()
             
         elif emotion == "FRUSTRATED":
+            self.led_queue.put("PURPLE") # <-- FRUSTRATED: PURPLE
             pose_up = [0.0, 0.0, 0.0, -1.0, 0.0, -0.0, 0.0]
             pose_frust = [-1.5, 0.5, 0.0, -0.8, 0.0, -0.0, 0.0]
             self.move_to_pose(pose_up, duration=1.2)
@@ -245,8 +284,10 @@ class G1PhysicalEmotions(Node):
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
             self.release_control()
+            self.led_queue.put("WHITE")
             
         elif emotion == "SAD":
+            self.led_queue.put("BLUE") # <-- SAD: BLUE
             pose_up = [0.0, 0.0, 0.0, -1.0, 0.0, -0.0, 0.0]
             pose_frust = [-1.0, 1.0, -0.2, -0.8, 0.7, -0.0, 0.0]
             self.move_to_pose(pose_up, duration=1.2)
@@ -262,8 +303,11 @@ class G1PhysicalEmotions(Node):
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
             self.release_control()
+            self.led_queue.put("WHITE")
 
         elif emotion == "ANGRY":
+            self.led_queue.put("RED") # <-- ANGRY: RED
+            
             send_walk_cmd('w')
             time.sleep(0.2)
             send_walk_cmd('stop')
@@ -291,7 +335,10 @@ class G1PhysicalEmotions(Node):
             send_walk_cmd('stop')
             self.release_control()
             
+            self.led_queue.put("WHITE")
+            
         elif emotion == "DANCE":
+            self.led_queue.put("ORANGE") # <-- DANCE: ORANGE
             pose_arriba = [-1.0, 0.5, -0.8, -0.8, 0.0, -0.0, 0.7]  
             pose_abajo = [-0.2, 0.1, 0.0, 0.8, 0.0, 0.0, 0.0] 
             pose_up = [0.0, 0.3, 0.2, -1.0, 0.0, 0.0, 0.0]
@@ -333,6 +380,7 @@ class G1PhysicalEmotions(Node):
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
             self.release_control()
+            self.led_queue.put("WHITE")
 
     def udp_listener_loop(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -365,7 +413,6 @@ class G1PhysicalEmotions(Node):
 
         cmd_msg = LowCmd()
         
-        # 1. DEIXEM LA MAJORIA DELS MOTORS EN MODE 0
         for j in range(29):
             cmd_msg.motor_cmd[j].mode = 0  
             cmd_msg.motor_cmd[j].q = 0.0
@@ -374,18 +421,14 @@ class G1PhysicalEmotions(Node):
             cmd_msg.motor_cmd[j].kp = 0.0
             cmd_msg.motor_cmd[j].kd = 0.0
 
-        # 1.5 FIXEM LA CINTURA PERQUÈ NO ES DESPLOME
-        # /arm_sdk captura la cintura. Si la deixem a mode 0, cau fluixa.
-        # L'hem de subjectar fort a la posició recta que tenia a l'inici.
         for i, waist_idx in enumerate(self.g1_waist):
             cmd_msg.motor_cmd[waist_idx].mode = 1
             cmd_msg.motor_cmd[waist_idx].q = self.home_waist_jpos[i]
             cmd_msg.motor_cmd[waist_idx].dq = 0.0
             cmd_msg.motor_cmd[waist_idx].tau = 0.0
-            cmd_msg.motor_cmd[waist_idx].kp = self.kp * 1.5 # Extra de força per subjectar
+            cmd_msg.motor_cmd[waist_idx].kp = self.kp * 1.5 
             cmd_msg.motor_cmd[waist_idx].kd = self.kd * 1.5
 
-        # 2. Llegim els angles per als braços
         comandos_brazos = {}
         for q_idx, g1_idx in self.pin_to_g1_q.items():
             ang = float(self.q_math[q_idx])
@@ -393,7 +436,6 @@ class G1PhysicalEmotions(Node):
                 ang = max(self.joint_safety_limits[g1_idx][0], min(self.joint_safety_limits[g1_idx][1], ang))
             comandos_brazos[g1_idx] = ang
             
-        # 3. ACTIVEM (MODE 1) ELS 14 MOTORS DELS BRAÇOS
         for i in range(7):
             left_motor_id = self.g1_arm_left[i]
             right_motor_id = self.g1_arm_right[i]
@@ -414,13 +456,18 @@ class G1PhysicalEmotions(Node):
             cmd_msg.motor_cmd[right_motor_id].kp = self.kp
             cmd_msg.motor_cmd[right_motor_id].kd = self.kd
 
-        # Avisem a l'SDK
         cmd_msg.motor_cmd[self.NOT_USED_JOINT].q = 1.0
         self.cmd_pub.publish(cmd_msg)
 
 def main(args=None):
+    # NOU: Inicialitzem la cua i el procés de LEDs ABANS que qualsevol cosa de ROS 2.
+    led_queue = multiprocessing.Queue()
+    led_process = multiprocessing.Process(target=led_worker, args=(led_queue,), daemon=True)
+    led_process.start()
+
+    # ARA iniciem ROS 2 sense perill que xoquen.
     rclpy.init(args=args)
-    node = G1PhysicalEmotions()
+    node = G1PhysicalEmotions(led_queue)
     
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(node)
@@ -447,10 +494,13 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node.led_queue.put("OFF") # Apaguem el LED a l'eixir
         node.release_control()
         time.sleep(0.5)
         rclpy.shutdown()
         os._exit(0)
 
 if __name__ == '__main__':
+    # Aquesta línia és màgia: força Python a crear un procés 100% net des de zero (ignorant la memòria del pare).
+    multiprocessing.set_start_method('spawn') 
     main()
