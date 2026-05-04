@@ -36,13 +36,13 @@ def led_worker(queue):
             cmd = queue.get()
             if cmd == "QUIT":
                 break
-            elif cmd == "WHITE":  audio_client.LedControl(255, 255, 255) # Neutral
-            elif cmd == "YELLOW": audio_client.LedControl(255, 255, 0)   # Happy
-            elif cmd == "ORANGE": audio_client.LedControl(255, 128, 0)   # Dance
-            elif cmd == "RED":    audio_client.LedControl(255, 0, 0)     # Angry
-            elif cmd == "BLUE":   audio_client.LedControl(0, 0, 255)     # Sad
-            elif cmd == "PURPLE": audio_client.LedControl(255, 0, 255)   # Frustrated
-            elif cmd == "OFF":    audio_client.LedControl(0, 0, 0)       # Apagar
+            elif cmd == "WHITE":  audio_client.LedControl(255, 255, 255)
+            elif cmd == "YELLOW": audio_client.LedControl(255, 255, 0)   
+            elif cmd == "ORANGE": audio_client.LedControl(255, 128, 0)   
+            elif cmd == "RED":    audio_client.LedControl(255, 0, 0)     
+            elif cmd == "BLUE":   audio_client.LedControl(0, 0, 255)     
+            elif cmd == "PURPLE": audio_client.LedControl(255, 0, 255)   
+            elif cmd == "OFF":    audio_client.LedControl(0, 0, 0)       
         except Exception:
             pass
 
@@ -226,32 +226,38 @@ class G1PhysicalEmotions(Node):
         if emotion == "HAPPY":
             self.led_queue.put("YELLOW") # <-- HAPPY: YELLOW
             pose_up = [0.0, 0.3, 0.2, -1.0, 0.0, 0.0, 0.0]
-            pose_next = [-2.5, 0.3, 0.4, -1.0, 0.0, 0.0, 0.0]
-            pose_next2 = [-2.5, 0.7, 0.0, 0.4, 0.0, 0.0, 0.0]
-            pose_wave1 = [-2.5, 1.3, 0.0, 0.4, 0.0, 0.0, 0.0]
-            pose_wave2 = [-2.5, 0.7, 0.0, 0.4, 0.0, 0.0, 0.0]
+            pose_next = [-2.8, 0.3, 0.4, -1.0, 0.0, 0.0, 0.0]
+            pose_next2 = [-2.8, 0.7, 0.0, 0.8, 0.0, 0.0, 0.0]
+            pose_wave1 = [-2.8, 1.3, 0.0, 0.8, 0.0, 0.0, 0.0]
+            pose_wave2 = [-2.8, 0.7, 0.0, 0.8, 0.0, 0.0, 0.0]
             
             self.move_to_pose(pose_up, duration=1.0)
             self.wait_until_reached()
+            self.led_queue.put("YELLOW")
             self.move_to_pose(pose_next, duration=1.5)
             self.wait_until_reached()
+            self.led_queue.put("YELLOW")
             self.move_to_pose(pose_next2, duration=1.5)
             self.wait_until_reached()
+            self.led_queue.put("YELLOW")
             
             for _ in range(2):
                 self.move_to_pose(pose_wave1, duration=0.7)
                 self.wait_until_reached()
+                self.led_queue.put("YELLOW")
                 self.move_to_pose(pose_wave2, duration=0.7)
                 self.wait_until_reached()
-            
-            self.move_to_pose(pose_next2, duration=1.0)
+                self.led_queue.put("YELLOW")
+            self.move_to_pose(pose_next2, duration=1.2)
             self.wait_until_reached()
-            self.move_to_pose(pose_next, duration=1.5)
+            self.led_queue.put("YELLOW")
+            self.move_to_pose(pose_next, duration=1.8)
             self.wait_until_reached()
-            self.move_to_pose(pose_up, duration=1.5)
+            self.led_queue.put("YELLOW")
+            self.move_to_pose(pose_up, duration=1.8)
             self.wait_until_reached()
 
-            self.move_to_home(duration=1.0)
+            self.move_to_home(duration=1.3)
             self.wait_until_reached()
             self.release_control()
             self.led_queue.put("WHITE") # Tornar a Neutral al final
@@ -270,36 +276,50 @@ class G1PhysicalEmotions(Node):
         elif emotion == "FRUSTRATED":
             self.led_queue.put("PURPLE") # <-- FRUSTRATED: PURPLE
             pose_up = [0.0, 0.0, 0.0, -1.0, 0.0, -0.0, 0.0]
-            pose_frust = [-1.5, 0.5, 0.0, -0.8, 0.0, -0.0, 0.0]
+            pose_frust = [-1.7, 0.5, 0.0, -0.8, 0.0, -0.0, 0.0]
             self.move_to_pose(pose_up, duration=1.2)
             self.wait_until_reached()
-
+            self.led_queue.put("PURPLE")
             self.move_to_pose(pose_frust, duration=1.2)
             self.wait_until_reached()
-            
-            time.sleep(4.0)
+            self.led_queue.put("PURPLE")
+            time.sleep(1.0)
+            self.led_queue.put("PURPLE")
+            time.sleep(1.0)
+            self.led_queue.put("PURPLE")
+            time.sleep(1.0)
+            self.led_queue.put("PURPLE")
+            time.sleep(1.0)
+            self.led_queue.put("PURPLE")
             self.move_to_pose(pose_up, duration=1.2)
             self.wait_until_reached()
- 
+            self.led_queue.put("PURPLE")
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
+            self.led_queue.put("PURPLE")
             self.release_control()
             self.led_queue.put("WHITE")
             
         elif emotion == "SAD":
             self.led_queue.put("BLUE") # <-- SAD: BLUE
             pose_up = [0.0, 0.0, 0.0, -1.0, 0.0, -0.0, 0.0]
-            pose_frust = [-1.0, 1.0, -0.2, -0.8, 0.7, -0.0, 0.0]
+            pose_frust = [-1.0, 1.0, -0.2, -0.8, 0.9, -0.0, 0.5]
             self.move_to_pose(pose_up, duration=1.2)
             self.wait_until_reached()
-
+            self.led_queue.put("BLUE")
             self.move_to_pose(pose_frust, duration=1.2)
             self.wait_until_reached()
-            
-            time.sleep(4.0)
+            self.led_queue.put("BLUE")
+            time.sleep(1.0)
+            self.led_queue.put("BLUE")
+            time.sleep(1.0)
+            self.led_queue.put("BLUE")
+            time.sleep(1.0)
+            self.led_queue.put("BLUE")
+            time.sleep(1.0)
             self.move_to_pose(pose_up, duration=1.2)
             self.wait_until_reached()
- 
+            self.led_queue.put("BLUE")
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
             self.release_control()
@@ -308,31 +328,34 @@ class G1PhysicalEmotions(Node):
         elif emotion == "ANGRY":
             self.led_queue.put("RED") # <-- ANGRY: RED
             
-            send_walk_cmd('w')
+            #send_walk_cmd('w')
             time.sleep(0.2)
-            send_walk_cmd('stop')
+            #send_walk_cmd('stop')
             
-            pose_guardia = [-0.8, 0.3, 0.0, -0.4, 0.0, 0.0, 0.0]
-            self.move_to_pose(pose_guardia, duration=0.8)
+            pose_guardia = [-1.0, 0.3, 0.0, -0.4, 0.0, 0.0, 0.0]
+            self.move_to_pose(pose_guardia, duration=1.2)
             self.wait_until_reached()
-            
+            self.led_queue.put("RED")
             pose_codo_flexionado = list(pose_guardia)
             pose_codo_flexionado[3] = -1.0  
             pose_codo_extendido = list(pose_guardia)
             pose_codo_extendido[3] = -0.4   
 
             for _ in range(3):
-                self.move_to_pose(pose_codo_flexionado, duration=0.4)
+                self.move_to_pose(pose_codo_flexionado, duration=0.5)
                 self.wait_until_reached()
-                self.move_to_pose(pose_codo_extendido, duration=0.4)
+                self.led_queue.put("RED")
+                self.move_to_pose(pose_codo_extendido, duration=0.5)
                 self.wait_until_reached()
+                self.led_queue.put("RED")
                 
-            self.move_to_home(duration=1.0)
+            self.move_to_home(duration=1.2)
             self.wait_until_reached()
+            self.led_queue.put("RED")
             
-            send_walk_cmd('s')
+            #send_walk_cmd('s')
             time.sleep(0.2)
-            send_walk_cmd('stop')
+            #send_walk_cmd('stop')
             self.release_control()
             
             self.led_queue.put("WHITE")
@@ -349,33 +372,42 @@ class G1PhysicalEmotions(Node):
                 send_walk_cmd('a') 
                 self.move_to_pose(pose_arriba, duration=1.1)
                 self.wait_until_reached()
-                
+                self.led_queue.put("ORANGE")
                 send_walk_cmd('d')
                 self.move_to_pose(pose_abajo, duration=1.1)
                 self.wait_until_reached()
+                self.led_queue.put("ORANGE")
 
             send_walk_cmd('stop')
             time.sleep(0.5)
+            self.led_queue.put("ORANGE")
             self.move_to_pose(pose_up, duration=1.0)
             self.wait_until_reached()
+            self.led_queue.put("ORANGE")
             self.move_to_pose(pose_next, duration=1.5)
             self.wait_until_reached()
+            self.led_queue.put("ORANGE")
 
-            send_walk_cmd('q') 
+            #send_walk_cmd('q') 
             self.move_to_pose(pose_giro, duration=1.8)
             self.wait_until_reached()
+            self.led_queue.put("ORANGE")
             
             send_walk_cmd('stop')
             time.sleep(0.5)
-            send_walk_cmd('e') 
+            self.led_queue.put("ORANGE")
+            #send_walk_cmd('e') 
             self.move_to_pose(pose_giro, duration=1.8)
             self.wait_until_reached()
+            self.led_queue.put("ORANGE")
             
             send_walk_cmd('stop')
             self.move_to_pose(pose_next, duration=1.5)
             self.wait_until_reached()
+            self.led_queue.put("ORANGE")
             self.move_to_pose(pose_up, duration=1.5)
             self.wait_until_reached()
+            self.led_queue.put("ORANGE")
 
             self.move_to_home(duration=1.5)
             self.wait_until_reached()
