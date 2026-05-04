@@ -5,9 +5,9 @@ import sounddevice as sd
 from gtts import gTTS
 
 # Configuración de Audio
-AUDIO_DEVICE = "hw:0,0" # Basado en tu arecord -l (C270 Webcam)
+AUDIO_DEVICE = "hw:0,0"
 CHANNELS = 1
-RATE = 16000  # Frecuencia ideal para voz
+RATE = 16000  
 CHUNK = 1024
 
 sdk_path = "/root/unitree_sdk2_python"
@@ -93,76 +93,84 @@ def main():
     zmq_pub_usb.bind("tcp://0.0.0.0:6002")
     threading.Thread(target=usb_cam_loop, args=(zmq_pub_usb,), daemon=True).start()
 
-    # Nuevo hilo de Audio Streaming
     threading.Thread(target=audio_stream_loop, args=(context,), daemon=True).start()
 
-    # Servidor de Comandos TCP
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(('0.0.0.0', 6000)); s.listen()
-        print("[*] SERVIDOR G1 ONLINE (Puerto 6000-6003)")
+    # --- NUEVO: LANZAMIENTO DEL SEGUNDO SCRIPT COMO SUBPROCESO ---
+    # Asegura que busque el archivo en el mismo directorio donde está alojado este script
+    script2_path = os.path.join(SCRIPT_DIR, "emotions_g1.py") # <-- ¡CAMBIA ESTE NOMBRE!
+    
+    print(f"[*] Iniciando proceso de emociones: {script2_path}")
+    # sys.executable asegura que use el mismo entorno de Python (útil si usas entornos virtuales de ROS2)
+    process_emotions = subprocess.Popen([sys.executable, script2_path])
+    # -------------------------------------------------------------
 
-        while True:
-            conn, addr = s.accept()
-            with conn:
-                data = conn.recv(1024)
-                if not data: continue
-                cmd = data.decode('utf-8').strip()
-                last_ping_time = time.time()
+    try:
+        # Servidor de Comandos TCP
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(('0.0.0.0', 6000)); s.listen()
+            print("[*] SERVIDOR G1 ONLINE (Puerto 6000-6003)")
 
-                try:
-                    if cmd.startswith('speak:'):
-                        phrase = cmd.split(':', 1)[1].strip()
-                        if phrase.lower() == "jumpscare":
-                            # Lògica Jumpscare existent
-                            audio_sdk.SetVolume(50)
-                            subprocess.run(["ffmpeg", "-y", "-i", JUMPSCARE_PATH, "-f", "s16le", "-ar", "16000", "-ac", "1", "temp.pcm"])
-                            with open("temp.pcm", "rb") as f:
-                                audio_sdk.PlayStream(f"j_{int(time.time())}", "1", f.read())
-                        else:
-                            # NOVA LÒGICA PER A CASTELLÀ
-                            try:
-                                # Generem l'àudio en castellà ('es')
-                                tts = gTTS(text=phrase, lang='es')
-                                tts.save("temp_tts.mp3")
-                                
-                                # Convertim a format PCM compatible amb el robot (16000Hz, mono)
-                                subprocess.run(["ffmpeg", "-y", "-i", "temp_tts.mp3", "-f", "s16le", "-ar", "16000", "-ac", "1", "temp_tts.pcm"], 
-                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                
-                                # Enviem el fitxer PCM al reproductor del robot
-                                with open("temp_tts.pcm", "rb") as f:
-                                    audio_sdk.PlayStream(f"tts_{int(time.time())}", "1", f.read())
-                            except Exception as e:
-                                print(f"Error generant TTS en castellà: {e}")
-                                # Fallback a la veu nativa en cas d'error
-                                audio_sdk.TtsMaker(phrase, 1)
-                    elif cmd == 'zero': loco.ZeroTorque()
-                    elif cmd == 'damp': loco.Damp()
-                    elif cmd == 'stand': loco.Squat2StandUp()
-                    elif cmd == 'squat': loco.StandUp2Squat()
-                    elif cmd == 'w': move_state.update({"vx": 0.4, "moving": True})
-                    elif cmd == 's': move_state.update({"vx": -0.4, "moving": True})
-                    elif cmd == 'stop': move_state["moving"] = False; loco.Move(0,0,0)
-                    elif cmd == 'ready': 
-                        print("DEBUG: Estado Ready (FSM 4: Lock Standing)")
-                            # ID 4: Bloquea las piernas en posición recta, seguro para la grúa
-                        loco.SetFsmId(4) 
+            while True:
+                conn, addr = s.accept()
+                with conn:
+                    data = conn.recv(1024)
+                    if not data: continue
+                    cmd = data.decode('utf-8').strip()
+                    last_ping_time = time.time()
 
-                    elif cmd == 'motion': 
-                        print("DEBUG: Estado Motion (Start - Main Control)")
-                            # Activa el controlador principal de locomoción (R2+A)
-                        loco.Start()
-                    elif cmd in ['0','1','2','3']:
-                        ids = {'0':99, '1':27, '2':26, '3':17}
-                        arm.ExecuteAction(ids[cmd])
-                    elif cmd == 'a': move_state.update({"vx": 0.0, "vy": 0.2, "vyaw": 0.0, "moving": True})
-                    elif cmd == 'd': move_state.update({"vx": 0.0, "vy": -0.2, "vyaw": 0.0, "moving": True})
-                    elif cmd == 'q': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": 0.5, "moving": True})
-                    elif cmd == 'e': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": -0.5, "moving": True})
-                        
-                    conn.sendall(b"FIN")
-                except Exception as e: print(f"Error CMD: {e}")
+                    try:
+                        if cmd.startswith('speak:'):
+                            phrase = cmd.split(':', 1)[1].strip()
+                            if phrase.lower() == "jumpscare":
+                                audio_sdk.SetVolume(50)
+                                subprocess.run(["ffmpeg", "-y", "-i", JUMPSCARE_PATH, "-f", "s16le", "-ar", "16000", "-ac", "1", "temp.pcm"])
+                                with open("temp.pcm", "rb") as f:
+                                    audio_sdk.PlayStream(f"j_{int(time.time())}", "1", f.read())
+                            else:
+                                try:
+                                    tts = gTTS(text=phrase, lang='es')
+                                    tts.save("temp_tts.mp3")
+                                    subprocess.run(["ffmpeg", "-y", "-i", "temp_tts.mp3", "-f", "s16le", "-ar", "16000", "-ac", "1", "temp_tts.pcm"], 
+                                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    with open("temp_tts.pcm", "rb") as f:
+                                        audio_sdk.PlayStream(f"tts_{int(time.time())}", "1", f.read())
+                                except Exception as e:
+                                    print(f"Error generant TTS en castellà: {e}")
+                                    audio_sdk.TtsMaker(phrase, 1)
+                        elif cmd == 'zero': loco.ZeroTorque()
+                        elif cmd == 'damp': loco.Damp()
+                        elif cmd == 'stand': loco.Squat2StandUp()
+                        elif cmd == 'squat': loco.StandUp2Squat()
+                        elif cmd == 'w': move_state.update({"vx": 0.4, "moving": True})
+                        elif cmd == 's': move_state.update({"vx": -0.4, "moving": True})
+                        elif cmd == 'stop': move_state["moving"] = False; loco.Move(0,0,0)
+                        elif cmd == 'ready': 
+                            print("DEBUG: Estado Ready (FSM 4: Lock Standing)")
+                            loco.SetFsmId(4) 
+                        elif cmd == 'motion': 
+                            print("DEBUG: Estado Motion (Start - Main Control)")
+                            loco.Start()
+                        elif cmd in ['0','1','2','3']:
+                            ids = {'0':99, '1':27, '2':26, '3':17}
+                            arm.ExecuteAction(ids[cmd])
+                        elif cmd == 'a': move_state.update({"vx": 0.0, "vy": 0.2, "vyaw": 0.0, "moving": True})
+                        elif cmd == 'd': move_state.update({"vx": 0.0, "vy": -0.2, "vyaw": 0.0, "moving": True})
+                        elif cmd == 'q': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": 0.5, "moving": True})
+                        elif cmd == 'e': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": -0.5, "moving": True})
+                            
+                        conn.sendall(b"FIN")
+                    except Exception as e: print(f"Error CMD: {e}")
+                    
+    except KeyboardInterrupt:
+        print("\n[*] Deteniendo servidor principal...")
+    finally:
+        # --- NUEVO: LIMPIEZA DEL SUBPROCESO AL CERRAR ---
+        print("[*] Matando el proceso de emociones dependiente...")
+        process_emotions.terminate()
+        process_emotions.wait()
+        print("[*] Todo apagado correctamente.")
+        # -------------------------------------------------
 
 if __name__ == '__main__':
     main()
