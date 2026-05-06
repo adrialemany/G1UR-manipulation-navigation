@@ -286,17 +286,20 @@ def main():
     # ======================
     # 🔥 INTRO
     # ======================
+    state = "intro"
+    question_idx = 0
+    
     intro_text_eng = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
     intro_text_spa = "Hola, ¡encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. ¡Empecemos!"
 
-    send_cmd(f"speak:{intro_text_spa}")
-    time.sleep(len(intro_text_spa) * 0.09 + 6)
+    # send_cmd(f"speak:{intro_text_spa}")
+    # time.sleep(len(intro_text_spa) * 0.09 + 6)
     
     # ======================
     # 🔥 QUESTION LOOP
     # ======================
-    state = "ask_question"
-    question_idx = 0
+    # state = "ask_question"
+    # question_idx = 0
     camera_active = False
     human_start = None
 
@@ -335,6 +338,22 @@ def main():
         # 🔥 STATE MACHINE
         # ======================
         print("🔁 Current state:", state)
+
+        if state == "intro":
+            print("🟡 INTRO")
+        
+            send_cmd(f"speak:{intro_text_spa}")
+        
+            # 충분히 기다림 (중요)
+            time.sleep(len(intro_text_spa) * 0.09 + 6)
+
+            # 🔥 buffer reset (추천)
+            frame_buffer.clear()
+            audio_buffer.clear()
+            infer.frame_buffer.clear()
+        
+            state = "ask_question"
+            continue
         
         if state == "ask_question":
             if question_idx >= len(QUESTIONS_SPA):
