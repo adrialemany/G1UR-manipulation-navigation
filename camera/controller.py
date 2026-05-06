@@ -402,6 +402,8 @@ def main():
             frames = slice_by_time(frame_buffer, human_start, human_end)
             audio_samples  = slice_by_time(audio_buffer, human_start, human_end)
             max_len = 16000 * 6
+
+            print("audio_samples example:", audio_samples[:5])
             
             if len(frames) < 8:
                 state = "ask_question"
