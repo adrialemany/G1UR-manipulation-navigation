@@ -345,6 +345,12 @@ def main():
             print(f"🗣️ Question: {question}")
 
             send_cmd(f"speak:{question}")
+            frame_buffer.clear()
+            audio_buffer.clear()
+            infer.frame_buffer.clear()
+        
+            human_start = None
+    
             time.sleep(max(4, len(question) * 0.06))
 
             time.sleep(1.0)
@@ -354,13 +360,14 @@ def main():
         elif state == "next_question":
             question_idx += 1
 
+            camera_active = False
             time.sleep(2)
             state = "ask_question"
 
         # ======================
         # 🎥 VIDEO RECEIVE
         # ======================
-        if state == "collecting":
+        if state == "collecting" and camera_active:
             try:
                 raw = video_socket.recv(zmq.NOBLOCK)
                 frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -452,6 +459,7 @@ def main():
             
             frame_buffer.clear()
             audio_buffer.clear()
+            infer.frame_buffer.clear()   # 🔥 이거 추가
 
             state = "next_question"
 
