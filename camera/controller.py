@@ -302,6 +302,7 @@ def main():
     # question_idx = 0
     camera_active = False
     human_start = None
+    human_end = None
 
     # state = "idle"
     silence_threshold = 1.0
@@ -311,6 +312,8 @@ def main():
     frame_count = 0
 
     last_print_time = 0
+
+    current_emotion = None
 
     while True:
         loop_start = time.time()
@@ -371,8 +374,8 @@ def main():
         
             human_start = None
     
-            # time.sleep(max(4, len(question) * 0.06))
-            time.sleep(len(question) * 0.09 + 4)
+            time.sleep(max(4, len(question) * 0.06))
+            # time.sleep(len(question) * 0.09 + 4)
 
             time.sleep(1.0)
             camera_active = True
@@ -461,28 +464,62 @@ def main():
             emotion = infer.predict(wav_tensor)
             emotion_str = EMOTION_MAP.get(emotion, "NEUTRAL")
 
-            print(f"🔥 Emotion: {emotion} → {emotion_str}")
+            current_emotion = emotion_str
+            state = "react" 
+            continue
 
-            # 🔥 motion + LED
-            send_emotion_udp(emotion_str)
-
-            time.sleep(0.3)
-
+        elif state == "react":
+            print("🟠 REACT")
+        
+            # 🔥 motion
+            send_emotion_udp(current_emotion)
+        
+            # 👉 motion duration
+            motion_duration = 3.0
+            time.sleep(motion_duration)
+        
             # 🔥 speech
-            speech_list = EMOTION_SPEECH_SPA_MAP.get(emotion_str, ["I understand."])
+            speech_list = EMOTION_SPEECH_SPA_MAP.get(current_emotion, ["Entiendo."])
             speech = random.choice(speech_list)
-
+        
             send_cmd(f"speak:{speech}")
-
-            # reset
+        
+            # 👉 speech 끝까지 기다림
+            time.sleep(len(speech) * 0.07 + 1.5)
+        
+            # 🔥 reset
             camera_active = False
             human_start = None
-            
+        
             frame_buffer.clear()
             audio_buffer.clear()
-            infer.frame_buffer.clear()   # 🔥 이거 추가
+            infer.frame_buffer.clear()
 
+            time.sleep(1.0)
             state = "next_question"
+
+            # print(f"🔥 Emotion: {emotion} → {emotion_str}")
+
+            # # 🔥 motion + LED
+            # send_emotion_udp(emotion_str)
+
+            # time.sleep(0.3)
+
+            # # 🔥 speech
+            # speech_list = EMOTION_SPEECH_SPA_MAP.get(emotion_str, ["I understand."])
+            # speech = random.choice(speech_list)
+
+            # send_cmd(f"speak:{speech}")
+
+            # # reset
+            # camera_active = False
+            # human_start = None
+            
+            # frame_buffer.clear()
+            # audio_buffer.clear()
+            # infer.frame_buffer.clear()   # 🔥 이거 추가
+
+            # state = "next_question"
 
         # Check FPS
         fps = 1 / (time.time() - loop_start + 1e-6)
