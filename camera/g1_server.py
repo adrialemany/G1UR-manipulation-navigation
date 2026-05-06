@@ -64,6 +64,60 @@ def audio_stream_loop(zmq_context):
             while True: time.sleep(1)
     except Exception as e:
         print(f"❌ Error en stream de audio: {e}")
+        
+def handle_client(conn, addr, loco, arm, audio_sdk):
+    global last_ping_time
+    with conn:
+        try:
+            data = conn.recv(1024)
+            if not data: 
+                return
+            
+            cmd = data.decode('utf-8').strip()
+            last_ping_time = time.time()
+
+            if cmd.startswith('speak:'):
+                phrase = cmd.split(':', 1)[1].strip()
+                if phrase.lower() == "jumpscare":
+                    audio_sdk.SetVolume(50)
+                    subprocess.run(["ffmpeg", "-y", "-i", JUMPSCARE_PATH, "-f", "s16le", "-ar", "16000", "-ac", "1", "temp.pcm"])
+                    with open("temp.pcm", "rb") as f:
+                        audio_sdk.PlayStream(f"j_{int(time.time())}", "1", f.read())
+                else:
+                    try:
+                        tts = gTTS(text=phrase, lang='es')
+                        tts.save(f"temp_tts_{addr[1]}.mp3") # Nombre único por puerto para evitar colisiones entre hilos
+                        subprocess.run(["ffmpeg", "-y", "-i", f"temp_tts_{addr[1]}.mp3", "-f", "s16le", "-ar", "16000", "-ac", "1", f"temp_tts_{addr[1]}.pcm"], 
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        with open(f"temp_tts_{addr[1]}.pcm", "rb") as f:
+                            audio_sdk.PlayStream(f"tts_{int(time.time())}", "1", f.read())
+                    except Exception as e:
+                        print(f"Error generant TTS en castellà: {e}")
+                        audio_sdk.TtsMaker(phrase, 1)
+            elif cmd == 'zero': loco.ZeroTorque()
+            elif cmd == 'damp': loco.Damp()
+            elif cmd == 'stand': loco.Squat2StandUp()
+            elif cmd == 'squat': loco.StandUp2Squat()
+            elif cmd == 'w': move_state.update({"vx": 0.4, "moving": True})
+            elif cmd == 's': move_state.update({"vx": -0.4, "moving": True})
+            elif cmd == 'stop': move_state["moving"] = False; loco.Move(0,0,0)
+            elif cmd == 'ready': 
+                print("DEBUG: Estado Ready (FSM 4: Lock Standing)")
+                loco.SetFsmId(4) 
+            elif cmd == 'motion': 
+                print("DEBUG: Estado Motion (Start - Main Control)")
+                loco.Start()
+            elif cmd in ['0','1','2','3']:
+                ids = {'0':99, '1':27, '2':26, '3':17}
+                arm.ExecuteAction(ids[cmd])
+            elif cmd == 'a': move_state.update({"vx": 0.0, "vy": 0.2, "vyaw": 0.0, "moving": True})
+            elif cmd == 'd': move_state.update({"vx": 0.0, "vy": -0.2, "vyaw": 0.0, "moving": True})
+            elif cmd == 'q': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": 0.5, "moving": True})
+            elif cmd == 'e': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": -0.5, "moving": True})
+                
+            conn.sendall(b"FIN")
+        except Exception as e: 
+            print(f"Error CMD: {e}")
 
 def main():
     global last_ping_time
@@ -95,9 +149,7 @@ def main():
 
     threading.Thread(target=audio_stream_loop, args=(context,), daemon=True).start()
 
-    # --- NUEVO: LANZAMIENTO DEL SEGUNDO SCRIPT COMO SUBPROCESO ---
-    # Asegura que busque el archivo en el mismo directorio donde está alojado este script
-    script2_path = os.path.join(SCRIPT_DIR, "emotions_g1.py") # <-- ¡CAMBIA ESTE NOMBRE!
+    script2_path = os.path.join(SCRIPT_DIR, "emotions_g1.py")
     
     print(f"[*] Iniciando proceso de emociones: {script2_path}")
     # sys.executable asegura que use el mismo entorno de Python (útil si usas entornos virtuales de ROS2)
@@ -113,54 +165,13 @@ def main():
 
             while True:
                 conn, addr = s.accept()
-                with conn:
-                    data = conn.recv(1024)
-                    if not data: continue
-                    cmd = data.decode('utf-8').strip()
-                    last_ping_time = time.time()
-
-                    try:
-                        if cmd.startswith('speak:'):
-                            phrase = cmd.split(':', 1)[1].strip()
-                            if phrase.lower() == "jumpscare":
-                                audio_sdk.SetVolume(50)
-                                subprocess.run(["ffmpeg", "-y", "-i", JUMPSCARE_PATH, "-f", "s16le", "-ar", "16000", "-ac", "1", "temp.pcm"])
-                                with open("temp.pcm", "rb") as f:
-                                    audio_sdk.PlayStream(f"j_{int(time.time())}", "1", f.read())
-                            else:
-                                try:
-                                    tts = gTTS(text=phrase, lang='es')
-                                    tts.save("temp_tts.mp3")
-                                    subprocess.run(["ffmpeg", "-y", "-i", "temp_tts.mp3", "-f", "s16le", "-ar", "16000", "-ac", "1", "temp_tts.pcm"], 
-                                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                    with open("temp_tts.pcm", "rb") as f:
-                                        audio_sdk.PlayStream(f"tts_{int(time.time())}", "1", f.read())
-                                except Exception as e:
-                                    print(f"Error generant TTS en castellà: {e}")
-                                    audio_sdk.TtsMaker(phrase, 1)
-                        elif cmd == 'zero': loco.ZeroTorque()
-                        elif cmd == 'damp': loco.Damp()
-                        elif cmd == 'stand': loco.Squat2StandUp()
-                        elif cmd == 'squat': loco.StandUp2Squat()
-                        elif cmd == 'w': move_state.update({"vx": 0.4, "moving": True})
-                        elif cmd == 's': move_state.update({"vx": -0.4, "moving": True})
-                        elif cmd == 'stop': move_state["moving"] = False; loco.Move(0,0,0)
-                        elif cmd == 'ready': 
-                            print("DEBUG: Estado Ready (FSM 4: Lock Standing)")
-                            loco.SetFsmId(4) 
-                        elif cmd == 'motion': 
-                            print("DEBUG: Estado Motion (Start - Main Control)")
-                            loco.Start()
-                        elif cmd in ['0','1','2','3']:
-                            ids = {'0':99, '1':27, '2':26, '3':17}
-                            arm.ExecuteAction(ids[cmd])
-                        elif cmd == 'a': move_state.update({"vx": 0.0, "vy": 0.2, "vyaw": 0.0, "moving": True})
-                        elif cmd == 'd': move_state.update({"vx": 0.0, "vy": -0.2, "vyaw": 0.0, "moving": True})
-                        elif cmd == 'q': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": 0.5, "moving": True})
-                        elif cmd == 'e': move_state.update({"vx": 0.0, "vy": 0.0, "vyaw": -0.5, "moving": True})
-                            
-                        conn.sendall(b"FIN")
-                    except Exception as e: print(f"Error CMD: {e}")
+                # Inicia un hilo por cada cliente que se conecta
+                client_thread = threading.Thread(
+                    target=handle_client, 
+                    args=(conn, addr, loco, arm, audio_sdk),
+                    daemon=True
+                )
+                client_thread.start()
                     
     except KeyboardInterrupt:
         print("\n[*] Deteniendo servidor principal...")
@@ -170,7 +181,6 @@ def main():
         process_emotions.terminate()
         process_emotions.wait()
         print("[*] Todo apagado correctamente.")
-        # -------------------------------------------------
 
 if __name__ == '__main__':
     main()
