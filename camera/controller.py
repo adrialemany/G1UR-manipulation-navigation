@@ -290,7 +290,7 @@ def main():
     intro_text_spa = "Hola, ¡encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. ¡Empecemos!"
 
     send_cmd(f"speak:{intro_text_spa}")
-    time.sleep(len(intro_text_spa) * 0.07 + 4)
+    time.sleep(len(intro_text_spa) * 0.09 + 6)
     
     # ======================
     # 🔥 QUESTION LOOP
