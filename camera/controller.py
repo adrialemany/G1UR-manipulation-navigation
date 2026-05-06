@@ -345,7 +345,7 @@ def main():
             send_cmd(f"speak:{intro_text_spa}")
         
             # 충분히 기다림 (중요)
-            time.sleep(len(intro_text_spa) * 0.09 + 6)
+            time.sleep(len(intro_text_spa) * 0.09 + 4)
 
             # 🔥 buffer reset (추천)
             frame_buffer.clear()
@@ -371,7 +371,8 @@ def main():
         
             human_start = None
     
-            time.sleep(max(4, len(question) * 0.06))
+            # time.sleep(max(4, len(question) * 0.06))
+            time.sleep(len(question) * 0.09 + 4)
 
             time.sleep(1.0)
             camera_active = True
