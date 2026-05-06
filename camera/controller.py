@@ -430,8 +430,7 @@ def main():
 
             wav_tensor = torch.tensor(wav).float().unsqueeze(0).to(infer.device)
 
-            # emotion = infer.predict(wav_tensor)
-            emotion = infer.predict(wav_tensor, frames_tensor)
+            emotion = infer.predict(wav_tensor)
             emotion_str = EMOTION_MAP.get(emotion, "NEUTRAL")
 
             print(f"🔥 Emotion: {emotion} → {emotion_str}")
