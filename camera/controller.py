@@ -286,9 +286,10 @@ def main():
     # ======================
     # 🔥 INTRO
     # ======================
-    intro_text = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
+    intro_text_eng = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
+    intro_text_spa = "Hola, ¡encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. ¡Empecemos!"
 
-    send_cmd(f"speak:{intro_text}")
+    send_cmd(f"speak:{intro_text_spa}")
     time.sleep(6)
     
     # ======================
@@ -402,8 +403,6 @@ def main():
             frames = slice_by_time(frame_buffer, human_start, human_end)
             audio_samples  = slice_by_time(audio_buffer, human_start, human_end)
             max_len = 16000 * 6
-
-            print("audio_samples example:", audio_samples[:5])
             
             if len(frames) < 8:
                 state = "ask_question"
@@ -422,7 +421,7 @@ def main():
             if len(audio_samples) == 0:
                 wav = np.zeros(16000 * 6)
             else:
-                wav = np.array([x[1] for x in audio_samples])
+                wav = np.array(audio_samples)
 
             if len(wav) < max_len:
                 wav = np.pad(wav, (0, max_len - len(wav)))
