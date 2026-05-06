@@ -338,7 +338,8 @@ def main():
         
         if state == "ask_question":
             if question_idx >= len(QUESTIONS_SPA):
-                send_cmd("speak:It was really nice talking with you today. Thank you!")
+                # send_cmd("speak:It was really nice talking with you today. Thank you!")
+                send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
                 break
 
             question = QUESTIONS_SPA[question_idx]
