@@ -286,18 +286,23 @@ def main():
     # ======================
     # 🔥 INTRO
     # ======================
-    intro_text = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
+    state = "intro"
+    question_idx = 0
+    
+    intro_text_eng = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
+    intro_text_spa = "Hola, ¡encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. ¡Empecemos!"
 
-    send_cmd(f"speak:{intro_text}")
-    time.sleep(6)
+    # send_cmd(f"speak:{intro_text_spa}")
+    # time.sleep(len(intro_text_spa) * 0.09 + 6)
     
     # ======================
     # 🔥 QUESTION LOOP
     # ======================
-    state = "ask_question"
-    question_idx = 0
+    # state = "ask_question"
+    # question_idx = 0
     camera_active = False
     human_start = None
+    human_end = None
 
     # state = "idle"
     silence_threshold = 1.0
@@ -307,6 +312,8 @@ def main():
     frame_count = 0
 
     last_print_time = 0
+
+    current_emotion = None
 
     while True:
         loop_start = time.time()
@@ -334,17 +341,41 @@ def main():
         # 🔥 STATE MACHINE
         # ======================
         print("🔁 Current state:", state)
+
+        if state == "intro":
+            print("🟡 INTRO")
         
-        if state == "ask_question":
+            send_cmd(f"speak:{intro_text_spa}")
+        
+            # 충분히 기다림 (중요)
+            time.sleep(len(intro_text_spa) * 0.09 + 4)
+
+            # 🔥 buffer reset (추천)
+            frame_buffer.clear()
+            audio_buffer.clear()
+            infer.frame_buffer.clear()
+        
+            state = "ask_question"
+            continue
+        
+        elif state == "ask_question":
             if question_idx >= len(QUESTIONS_SPA):
-                send_cmd("speak:It was really nice talking with you today. Thank you!")
+                # send_cmd("speak:It was really nice talking with you today. Thank you!")
+                send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
                 break
 
             question = QUESTIONS_SPA[question_idx]
             print(f"🗣️ Question: {question}")
 
             send_cmd(f"speak:{question}")
+            frame_buffer.clear()
+            audio_buffer.clear()
+            infer.frame_buffer.clear()
+        
+            human_start = None
+    
             time.sleep(max(4, len(question) * 0.06))
+            # time.sleep(len(question) * 0.09 + 4)
 
             time.sleep(1.0)
             camera_active = True
@@ -353,13 +384,14 @@ def main():
         elif state == "next_question":
             question_idx += 1
 
+            camera_active = False
             time.sleep(2)
             state = "ask_question"
 
         # ======================
         # 🎥 VIDEO RECEIVE
         # ======================
-        if state == "collecting":
+        if state == "collecting" and camera_active:
             try:
                 raw = video_socket.recv(zmq.NOBLOCK)
                 frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -420,7 +452,7 @@ def main():
             if len(audio_samples) == 0:
                 wav = np.zeros(16000 * 6)
             else:
-                wav = np.array([x[1] for x in audio_samples])
+                wav = np.array(audio_samples)
 
             if len(wav) < max_len:
                 wav = np.pad(wav, (0, max_len - len(wav)))
@@ -429,31 +461,65 @@ def main():
 
             wav_tensor = torch.tensor(wav).float().unsqueeze(0).to(infer.device)
 
-            # emotion = infer.predict(wav_tensor)
-            emotion = infer.predict(wav_tensor, frames_tensor)
+            emotion = infer.predict(wav_tensor)
             emotion_str = EMOTION_MAP.get(emotion, "NEUTRAL")
 
-            print(f"🔥 Emotion: {emotion} → {emotion_str}")
+            current_emotion = emotion_str
+            state = "react" 
+            continue
 
-            # 🔥 motion + LED
-            send_emotion_udp(emotion_str)
-
-            time.sleep(0.3)
-
+        elif state == "react":
+            print("🟠 REACT")
+        
+            # 🔥 motion
+            send_emotion_udp(current_emotion)
+        
+            # 👉 motion duration
+            motion_duration = 3.0
+            time.sleep(motion_duration)
+        
             # 🔥 speech
-            speech_list = EMOTION_SPEECH_SPA_MAP.get(emotion_str, ["I understand."])
+            speech_list = EMOTION_SPEECH_SPA_MAP.get(current_emotion, ["Entiendo."])
             speech = random.choice(speech_list)
-
+        
             send_cmd(f"speak:{speech}")
-
-            # reset
+        
+            # 👉 speech 끝까지 기다림
+            time.sleep(len(speech) * 0.07 + 1.5)
+        
+            # 🔥 reset
             camera_active = False
             human_start = None
-            
+        
             frame_buffer.clear()
             audio_buffer.clear()
+            infer.frame_buffer.clear()
 
+            time.sleep(1.0)
             state = "next_question"
+
+            # print(f"🔥 Emotion: {emotion} → {emotion_str}")
+
+            # # 🔥 motion + LED
+            # send_emotion_udp(emotion_str)
+
+            # time.sleep(0.3)
+
+            # # 🔥 speech
+            # speech_list = EMOTION_SPEECH_SPA_MAP.get(emotion_str, ["I understand."])
+            # speech = random.choice(speech_list)
+
+            # send_cmd(f"speak:{speech}")
+
+            # # reset
+            # camera_active = False
+            # human_start = None
+            
+            # frame_buffer.clear()
+            # audio_buffer.clear()
+            # infer.frame_buffer.clear()   # 🔥 이거 추가
+
+            # state = "next_question"
 
         # Check FPS
         fps = 1 / (time.time() - loop_start + 1e-6)
