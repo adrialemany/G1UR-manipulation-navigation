@@ -1,3 +1,13 @@
 build/
 install/
 log/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# WallForge proyectos guardados
+*.wfp
+
+# Backups / archivos temporales
+*.zip

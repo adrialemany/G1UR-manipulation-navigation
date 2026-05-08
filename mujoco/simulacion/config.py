@@ -1,5 +1,5 @@
 ROBOT = "g1" # Robot name, "go2", "b2", "b2w", "h1", "go2w", "g1" 
-ROBOT_SCENE = "scene_from_sdf_centered.xml" # Robot scene
+ROBOT_SCENE = "scene_from_sdf_centered_new.xml" # Robot scene
 DOMAIN_ID = 1 # Domain id
 INTERFACE = "lo" # Interface 
 
