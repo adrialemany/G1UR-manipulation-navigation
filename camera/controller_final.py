@@ -435,24 +435,40 @@ def main():
             last_audio_time = time.time()
         
             state = "collecting"
-        
+
         elif state == "ask_question":
             if question_idx >= len(QUESTIONS_SPA):
                 send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
                 break
-
-            use_real_inference = (question_idx == len(QUESTIONS_SPA) - 1)
+        
             question = QUESTIONS_SPA[question_idx]
         
-            is_speaking = True
-            send_cmd(f"speak:{question}")
-
             print(f"🗣️ Asking: {question}")
+            send_cmd(f"speak:{question}")
         
-            speak_end_time = time.time() + len(question)*0.07 + 2.0
-            next_state = "start_listening"
-            state = "speaking"
+            # 🔥 핵심: speaking state 제거
+            time.sleep(len(question) * 0.11 + 3.0)
+        
+            state = "start_listening"
             continue
+
+        # elif state == "ask_question":
+        #     if question_idx >= len(QUESTIONS_SPA):
+        #         send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
+        #         break
+
+        #     use_real_inference = (question_idx == len(QUESTIONS_SPA) - 1)
+        #     question = QUESTIONS_SPA[question_idx]
+        
+        #     is_speaking = True
+        #     send_cmd(f"speak:{question}")
+
+        #     print(f"🗣️ Asking: {question}")
+        
+        #     # speak_end_time = time.time() + len(question)*0.07 + 2.0
+        #     speak_end_time = time.time() + len(question) * 0.11 + 3.0
+        #     next_state = "start_listening"
+        #     continue
             
         elif state == "next_question":
             question_idx += 1
