@@ -236,6 +236,24 @@ def crop_face(frame):
     return crop
 
 
+def wait_with_poll(duration, audio_socket):
+    start = time.time()
+    while time.time() - start < duration:
+        try:
+            raw_audio = audio_socket.recv(zmq.NOBLOCK)
+            audio = np.frombuffer(raw_audio, dtype='float32')
+            audio = (audio * 32768).astype(np.int16)
+
+            now = time.time()
+            for sample in audio:
+                audio_buffer.append((now, sample))
+
+        except zmq.Again:
+            pass
+
+        time.sleep(0.01)
+
+
 # ======================
 # 🔥 Buffers
 # ======================
@@ -249,37 +267,37 @@ def slice_by_time(buffer, t_start, t_end):
 # ======================
 # 🔥 Robot Command
 # ======================   
-def send_cmd(cmd):
-    global sock
-    try:
-        msg = cmd + "\n"
-        print(f"🚀 SEND CMD: {msg.strip()}")
-        sock.sendall(msg.encode('utf-8'))
-    except:
-        print("⚠️ reconnecting socket...")
-        sock.close()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((ROBOT_IP, 6000))
-        sock.sendall(msg.encode('utf-8'))
-        
 # def send_cmd(cmd):
-#     print(f"🚀 SEND CMD: {cmd}")
+#     global sock
 #     try:
-#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#             s.settimeout(1.0)
-#             s.connect((ROBOT_IP, 6000))
+#         msg = cmd + "\n"
+#         print(f"🚀 SEND CMD: {msg.strip()}")
+#         sock.sendall(msg.encode('utf-8'))
+#     except:
+#         print("⚠️ reconnecting socket...")
+#         sock.close()
+#         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         sock.connect((ROBOT_IP, 6000))
+#         sock.sendall(msg.encode('utf-8'))
+        
+def send_cmd(cmd):
+    print(f"🚀 SEND CMD: {cmd}")
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect((ROBOT_IP, 6000))
             
-#             msg = cmd + "\n"
-#             s.sendall(msg.encode('utf-8'))
+            msg = cmd + "\n"
+            s.sendall(msg.encode('utf-8'))
             
-#             try:
-#                 s.recv(1024)
-#                 print("✅ robot responded")
-#             except:
-#                 print("⚠️ no response from robot")
-#                 pass
-#     except Exception as e:
-#         print("❌ CMD send error:", e)
+            try:
+                s.recv(1024)
+                print("✅ robot responded")
+            except:
+                print("⚠️ no response from robot")
+                pass
+    except Exception as e:
+        print("❌ CMD send error:", e)
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -341,7 +359,6 @@ def main():
     last_print_time = 0
     current_emotion = None
     use_real_inference = False
-    is_speaking = False
     speak_end_time = 0
     next_state = None
 
@@ -351,44 +368,21 @@ def main():
         # ======================
         # 🔊 AUDIO RECEIVE
         # ======================
-        if not is_speaking:
-            try:
-                raw_audio = audio_socket.recv(zmq.NOBLOCK)
-                audio = np.frombuffer(raw_audio, dtype='float32')
-                audio = (audio * 32768).astype(np.int16)
-        
-                now = time.time()
-        
-                for sample in audio:
-                    audio_buffer.append((now, sample))
-        
-                last_audio_time = now
-                print("🎤 Audio received:", len(audio))
-        
-            except zmq.Again:
-                pass
+        try:
+            raw_audio = audio_socket.recv(zmq.NOBLOCK)
+            audio = np.frombuffer(raw_audio, dtype='float32')
+            audio = (audio * 32768).astype(np.int16)
 
-        # # ======================
-        # # 🔊 AUDIO RECEIVE
-        # # ======================
-        # try:
-        #     if is_speaking:
-        #         continue
-        
-        #     raw_audio = audio_socket.recv(zmq.NOBLOCK)
-        #     audio = np.frombuffer(raw_audio, dtype='float32')
-        #     audio = (audio * 32768).astype(np.int16)
+            now = time.time()
 
-        #     now = time.time()
+            for sample in audio:
+                audio_buffer.append((now, sample))
 
-        #     for sample in audio:
-        #         audio_buffer.append((now, sample))
+            last_audio_time = now
+            print("🎤 Audio received:", len(audio))
 
-        #     last_audio_time = now
-        #     print("🎤 Audio received:", len(audio))
-
-        # except zmq.Again:
-        #     pass
+        except zmq.Again:
+            pass
         
         # ======================
         # 🔥 STATE MACHINE
@@ -400,7 +394,7 @@ def main():
         
             send_cmd(f"speak:{intro_text_spa}")
         
-            time.sleep(len(intro_text_spa) * 0.11 + 4.0)  # 🔥 핵심
+            time.sleep(len(intro_text_spa) * 0.08 + 4.0)  # 🔥 핵심
         
             state = "ask_question"
             print("➡️ next_state:", next_state)
@@ -419,11 +413,11 @@ def main():
         #     print("🔥 INTRO SENT")
         #     continue
 
-        elif state == "speaking":
-            if time.time() > speak_end_time:
-                is_speaking = False
-                state = next_state
-                continue
+        # elif state == "speaking":
+        #     if time.time() > speak_end_time:
+        #         is_speaking = False
+        #         state = next_state
+        #         continue
 
         elif state == "start_listening":
             frame_buffer.clear()
@@ -446,10 +440,30 @@ def main():
             print(f"🗣️ Asking: {question}")
             send_cmd(f"speak:{question}")
         
-            time.sleep(len(question) * 0.11 + 4.0)
+            # 🔥 무조건 blocking
+            wait_time = len(question) * 0.08 + 3.0
+            print(f"⏳ waiting {wait_time:.2f}s")
+        
+            # time.sleep(wait_time)
+            wait_with_poll(wait_time, audio_socket)
         
             state = "start_listening"
             continue
+
+        # elif state == "ask_question":
+        #     if question_idx >= len(QUESTIONS_SPA):
+        #         send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
+        #         break
+        
+        #     question = QUESTIONS_SPA[question_idx]
+        
+        #     print(f"🗣️ Asking: {question}")
+        #     send_cmd(f"speak:{question}")
+        
+        #     time.sleep(len(question) * 0.11 + 4.0)
+        
+        #     state = "start_listening"
+        #     continue
 
         # elif state == "ask_question":
         #     if question_idx >= len(QUESTIONS_SPA):
@@ -589,17 +603,19 @@ def main():
             print("🟠 REACT")
         
             send_emotion_udp(current_emotion)
-
             time.sleep(2.5)
         
             speech = random.choice(EMOTION_SPEECH_SPA_MAP.get(current_emotion, ["Entiendo."]))
-        
-            is_speaking = True
             send_cmd(f"speak:{speech}")
         
-            speak_end_time = time.time() + len(speech)*0.07 + 1.5
-            next_state = "next_question"
-            state = "speaking"
+            # 🔥 blocking wait
+            wait_time = len(speech) * 0.11 + 2.0
+            print(f"⏳ waiting {wait_time:.2f}s")
+        
+            # time.sleep(wait_time)
+            wait_with_poll(wait_time, audio_socket)
+        
+            state = "next_question"
             continue
 
         # Check FPS
