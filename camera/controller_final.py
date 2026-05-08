@@ -369,21 +369,43 @@ def main():
                 # time.sleep(len(question) * 0.07 + 1.5)
                 speech_time = len(QUESTIONS_SPA[question_idx]) * 0.065
                 time.sleep(speech_time + 1.0)
+                
+                frame_buffer.clear()
+                audio_buffer.clear()
+                infer.frame_buffer.clear()
+                last_audio_time = time.time()
 
                 camera_active = True
                 state = "collecting"
                 
             else:
                 use_real_inference = False
-                
-                PREDEFINED = ["HAPPY", "ANGRY", "DANCE", "SAD", "FRUSTRATED", "NEUTRAL"]
-                current_emotion = PREDEFINED[question_idx]
 
+                frame_buffer.clear()
+                audio_buffer.clear()
+                infer.frame_buffer.clear()
+            
+                human_start = None
+            
                 speech_time = len(question) * 0.065
                 time.sleep(speech_time + 1.0)
 
-                state = "react"
-                continue
+                frame_buffer.clear()
+                audio_buffer.clear()
+                infer.frame_buffer.clear()
+                last_audio_time = time.time()
+            
+                camera_active = True
+                state = "collecting"
+                
+                # PREDEFINED = ["HAPPY", "ANGRY", "DANCE", "SAD", "FRUSTRATED", "NEUTRAL"]
+                # current_emotion = PREDEFINED[question_idx]
+
+                # speech_time = len(question) * 0.065
+                # time.sleep(speech_time + 1.0)
+
+                # state = "react"
+                # continue
             
         elif state == "next_question":
             question_idx += 1
@@ -423,12 +445,12 @@ def main():
                 #     human_end = now
                 #     state = "predict"
                     
-                min_listen_time = 2.0
-                max_wait_time = 10.0
+                min_listen_time = 3.0
+                max_wait_time = 20.0
                 valid_face_frames = len(frame_buffer)
 
                 if ((now - human_start > min_listen_time) and
-                    (now - last_audio_time > 1.8) and 
+                    (now - last_audio_time > 3.0) and 
                     valid_face_frames > 15) or \
                     (now - human_start > max_wait_time):
                     human_end = now
@@ -454,8 +476,11 @@ def main():
             max_len = 16000 * 6
             
             if len(frames) < 8:
-                state = "ask_question"
+                current_emotion = "NEUTRAL"
+                state = "react"
                 continue
+                # state = "ask_question"
+                # continue
 
             frames = frames[-16:]
 
