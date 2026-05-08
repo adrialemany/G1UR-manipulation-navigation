@@ -302,8 +302,8 @@ def main():
 
     time.sleep(2.0)
     
-    send_cmd("ping")
-    time.sleep(0.5)
+    # send_cmd("ping")
+    # time.sleep(0.5)
 
     print("🔥 INTRO START")
     send_cmd(f"speak:{intro_text_spa}")
