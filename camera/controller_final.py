@@ -412,6 +412,7 @@ def main():
             if time.time() > speak_end_time:
                 is_speaking = False
                 state = next_state
+                continue
 
         elif state == "start_listening":
             frame_buffer.clear()
