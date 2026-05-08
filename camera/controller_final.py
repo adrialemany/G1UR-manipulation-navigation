@@ -434,8 +434,10 @@ def main():
         
             is_speaking = True
             send_cmd(f"speak:{question}")
+
+            print(f"🗣️ Asking: {question}")
         
-            speak_end_time = time.time() + len(question)*0.07 + 1.0
+            speak_end_time = time.time() + len(question)*0.07 + 2.0
             next_state = "start_listening"
             state = "speaking"
             continue
