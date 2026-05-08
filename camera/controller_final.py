@@ -397,16 +397,27 @@ def main():
 
         if state == "intro":
             print("🔥 INTRO")
-
             is_speaking = True
             send_cmd(f"speak:{intro_text_spa}")
-            # time.sleep(len(intro_text_spa) * 0.09 + 4)
-            speak_end_time = time.time() + len(intro_text_spa) * 0.07 + 1.0
-            next_state = "ask_question"
-            state = "speaking"
-
-            print("🔥 INTRO SENT")
+        
+            time.sleep(len(intro_text_spa) * 0.09 + 4.0)  # 🔥 확실히 기다림
+        
+            is_speaking = False
+            state = "ask_question"
             continue
+            
+        # if state == "intro":
+        #     print("🔥 INTRO")
+
+        #     is_speaking = True
+        #     send_cmd(f"speak:{intro_text_spa}")
+        #     # time.sleep(len(intro_text_spa) * 0.09 + 4)
+        #     speak_end_time = time.time() + len(intro_text_spa) * 0.07 + 1.0
+        #     next_state = "ask_question"
+        #     state = "speaking"
+
+        #     print("🔥 INTRO SENT")
+        #     continue
 
         elif state == "speaking":
             if time.time() > speak_end_time:
