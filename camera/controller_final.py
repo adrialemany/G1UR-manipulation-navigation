@@ -437,15 +437,16 @@ def main():
         
             question = QUESTIONS_SPA[question_idx]
         
+            # ✅ 핵심 추가
+            use_real_inference = (question_idx == len(QUESTIONS_SPA) - 1)
+        
             print(f"🗣️ Asking: {question}")
+            print(f"🧠 use_real_inference: {use_real_inference}")
+        
             send_cmd(f"speak:{question}")
         
-            # 🔥 무조건 blocking
-            wait_time = len(question) * 0.08 + 3.0
-            print(f"⏳ waiting {wait_time:.2f}s")
-        
-            # time.sleep(wait_time)
-            wait_with_poll(wait_time, audio_socket)
+            wait_time = len(question) * 0.11 + 3.0
+            wait_with_poll(wait_time)
         
             state = "start_listening"
             continue
@@ -460,27 +461,14 @@ def main():
         #     print(f"🗣️ Asking: {question}")
         #     send_cmd(f"speak:{question}")
         
-        #     time.sleep(len(question) * 0.11 + 4.0)
+        #     # 🔥 무조건 blocking
+        #     wait_time = len(question) * 0.08 + 3.0
+        #     print(f"⏳ waiting {wait_time:.2f}s")
+        
+        #     # time.sleep(wait_time)
+        #     wait_with_poll(wait_time, audio_socket)
         
         #     state = "start_listening"
-        #     continue
-
-        # elif state == "ask_question":
-        #     if question_idx >= len(QUESTIONS_SPA):
-        #         send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
-        #         break
-
-        #     use_real_inference = (question_idx == len(QUESTIONS_SPA) - 1)
-        #     question = QUESTIONS_SPA[question_idx]
-        
-        #     is_speaking = True
-        #     send_cmd(f"speak:{question}")
-
-        #     print(f"🗣️ Asking: {question}")
-        
-        #     # speak_end_time = time.time() + len(question)*0.07 + 2.0
-        #     speak_end_time = time.time() + len(question) * 0.11 + 3.0
-        #     next_state = "start_listening"
         #     continue
             
         elif state == "next_question":
