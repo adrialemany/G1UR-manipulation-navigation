@@ -302,11 +302,11 @@ def main():
 
     time.sleep(3.0)
 
-    print("🔥 INTRO START")
-    send_cmd(f"speak:{intro_text_spa}")
-    time.sleep(len(intro_text_spa) * 0.09 + 4)
+    # print("🔥 INTRO START")
+    # send_cmd(f"speak:{intro_text_spa}")
+    # time.sleep(len(intro_text_spa) * 0.09 + 4)
 
-    state = "ask_question"
+    # state = "ask_question"
     
     # ======================
     # 🔥 QUESTION LOOP
@@ -319,6 +319,7 @@ def main():
     last_print_time = 0
     current_emotion = None
     use_real_inference = False
+    is_speaking = False
 
     while True:
         loop_start = time.time()
@@ -327,6 +328,9 @@ def main():
         # 🔊 AUDIO RECEIVE
         # ======================
         try:
+            if is_speaking:
+                raise zmq.Again()
+        
             raw_audio = audio_socket.recv(zmq.NOBLOCK)
             audio = np.frombuffer(raw_audio, dtype='float32')
             audio = (audio * 32768).astype(np.int16)
@@ -346,66 +350,109 @@ def main():
         # 🔥 STATE MACHINE
         # ======================
         print("🔁 Current state:", state)
+
+        if state == "intro":
+            print("🔥 INTRO")
+
+            is_speaking = True
+            send_cmd(f"speak:{intro_text_spa}")
+            time.sleep(len(intro_text_spa) * 0.09 + 4)
+            is_speaking = False
         
-        if state == "ask_question":
+            frame_buffer.clear()
+            audio_buffer.clear()
+            infer.frame_buffer.clear()
+        
+            last_audio_time = time.time()
+        
+            state = "ask_question"
+            time.sleep(1.5)
+            print("🔥 INTRO SENT")
+            continue
+        
+        elif state == "ask_question":
             if question_idx >= len(QUESTIONS_SPA):
                 send_cmd("speak:Ha sido un placer hablar contigo hoy. ¡Muchas gracias!")
                 break
 
+            use_real_inference = (question_idx == len(QUESTIONS_SPA) - 1)
+
             question = QUESTIONS_SPA[question_idx]
             print(f"🗣️ Question: {question}")
 
+            speech_time = len(question) * 0.065
+
+            is_speaking = True
             send_cmd(f"speak:{question}")
+            time.sleep(speech_time + 1.0)
+
+            # 🔥 residual audio 제거
+            audio_buffer.clear()
+            frame_buffer.clear()
+            infer.frame_buffer.clear()
+            
+            last_audio_time = time.time()
+            
+            is_speaking = False
+            
+            human_start = None
+            last_audio_time = time.time()
+            
+            camera_active = True
+            state = "collecting"
             
             # 🔥 Decide inference Option
-            if question_idx == len(QUESTIONS_SPA) - 1:
-                use_real_inference = True
+            # if question_idx == len(QUESTIONS_SPA) - 1:
+            #     use_real_inference = True
                 
-                frame_buffer.clear()
-                audio_buffer.clear()
-                infer.frame_buffer.clear()
+            #     frame_buffer.clear()
+            #     audio_buffer.clear()
+            #     infer.frame_buffer.clear()
                 
-                human_start = None
-                # time.sleep(len(question) * 0.07 + 1.5)
-                speech_time = len(QUESTIONS_SPA[question_idx]) * 0.065
-                time.sleep(speech_time + 1.0)
-                
-                frame_buffer.clear()
-                audio_buffer.clear()
-                infer.frame_buffer.clear()
-                last_audio_time = time.time()
+            #     human_start = None
+            #     is_speaking = True
+            #     # time.sleep(len(question) * 0.07 + 1.5)
+            #     speech_time = len(QUESTIONS_SPA[question_idx]) * 0.065
 
-                camera_active = True
-                state = "collecting"
+            #     is_speaking = False
+            #     time.sleep(speech_time + 1.0)
                 
-            else:
-                use_real_inference = False
+            #     frame_buffer.clear()
+            #     audio_buffer.clear()
+            #     infer.frame_buffer.clear()
+            #     last_audio_time = time.time()
 
-                frame_buffer.clear()
-                audio_buffer.clear()
-                infer.frame_buffer.clear()
+            #     camera_active = True
+            #     state = "collecting"
+                
+            # else:
+            #     use_real_inference = False
+
+            #     frame_buffer.clear()
+            #     audio_buffer.clear()
+            #     infer.frame_buffer.clear()
             
-                human_start = None
+            #     human_start = None
             
-                speech_time = len(question) * 0.065
-                time.sleep(speech_time + 1.0)
+            #     speech_time = len(question) * 0.065
+            #     time.sleep(speech_time + 1.0)
 
-                frame_buffer.clear()
-                audio_buffer.clear()
-                infer.frame_buffer.clear()
-                last_audio_time = time.time()
+            #     frame_buffer.clear()
+            #     audio_buffer.clear()
+            #     infer.frame_buffer.clear()
+            #     last_audio_time = time.time()
             
-                camera_active = True
-                state = "collecting"
+            #     camera_active = True
+            #     state = "collecting"
                 
-                # PREDEFINED = ["HAPPY", "ANGRY", "DANCE", "SAD", "FRUSTRATED", "NEUTRAL"]
-                # current_emotion = PREDEFINED[question_idx]
+            #     # PREDEFINED = ["HAPPY", "ANGRY", "DANCE", "SAD", "FRUSTRATED", "NEUTRAL"]
+            #     # current_emotion = PREDEFINED[question_idx]
 
-                # speech_time = len(question) * 0.065
-                # time.sleep(speech_time + 1.0)
+            #     # speech_time = len(question) * 0.065
+            #     # time.sleep(speech_time + 1.0)
 
-                # state = "react"
-                # continue
+            #     # state = "react"
+            #     # continue
             
         elif state == "next_question":
             question_idx += 1
@@ -537,11 +584,15 @@ def main():
             # 🔥 speech
             speech_list = EMOTION_SPEECH_SPA_MAP.get(current_emotion, ["Entiendo."])
             speech = random.choice(speech_list)
-        
+
+            is_speaking = True
+            
             send_cmd(f"speak:{speech}")
         
             # 👉 wait during user's speech
             time.sleep(len(speech) * 0.07 + 1.5)
+
+            is_speaking = False
         
             # 🔥 reset
             camera_active = False
