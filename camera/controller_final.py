@@ -169,7 +169,7 @@ QUESTIONS_ENG = [
     "Have you been working on something recently that didn’t go as smoothly as you hoped?",
 
     # NEUTRAL
-    "How has your day been so far?"
+    "How has your day been so far?",
     
     # freedom
     "Is there anything you'd like to share about your day?"
