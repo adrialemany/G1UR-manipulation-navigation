@@ -248,26 +248,43 @@ def slice_by_time(buffer, t_start, t_end):
 
 # ======================
 # 🔥 Robot Command
-# ======================        
+# ======================   
 def send_cmd(cmd):
-    print(f"🚀 SEND CMD: {cmd}")
+    global sock
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1.0)
-            s.connect((ROBOT_IP, 6000))
+        msg = cmd + "\n"
+        print(f"🚀 SEND CMD: {msg.strip()}")
+        sock.sendall(msg.encode('utf-8'))
+    except:
+        print("⚠️ reconnecting socket...")
+        sock.close()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((ROBOT_IP, 6000))
+        sock.sendall(msg.encode('utf-8'))
+        
+# def send_cmd(cmd):
+#     print(f"🚀 SEND CMD: {cmd}")
+#     try:
+#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#             s.settimeout(1.0)
+#             s.connect((ROBOT_IP, 6000))
             
-            msg = cmd + "\n"
-            s.sendall(msg.encode('utf-8'))
+#             msg = cmd + "\n"
+#             s.sendall(msg.encode('utf-8'))
             
-            try:
-                s.recv(1024)
-                print("✅ robot responded")
-            except:
-                print("⚠️ no response from robot")
-                pass
-    except Exception as e:
-        print("❌ CMD send error:", e)
+#             try:
+#                 s.recv(1024)
+#                 print("✅ robot responded")
+#             except:
+#                 print("⚠️ no response from robot")
+#                 pass
+#     except Exception as e:
+#         print("❌ CMD send error:", e)
 
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.connect((ROBOT_IP, 6000))
+sock.settimeout(2.0)
 
 # ======================
 # 🔥 main
@@ -325,6 +342,8 @@ def main():
     current_emotion = None
     use_real_inference = False
     is_speaking = False
+    speak_end_time = 0
+    next_state = None
 
     while True:
         loop_start = time.time()
@@ -332,24 +351,44 @@ def main():
         # ======================
         # 🔊 AUDIO RECEIVE
         # ======================
-        try:
-            if is_speaking:
-                raise zmq.Again()
+        if not is_speaking:
+            try:
+                raw_audio = audio_socket.recv(zmq.NOBLOCK)
+                audio = np.frombuffer(raw_audio, dtype='float32')
+                audio = (audio * 32768).astype(np.int16)
         
-            raw_audio = audio_socket.recv(zmq.NOBLOCK)
-            audio = np.frombuffer(raw_audio, dtype='float32')
-            audio = (audio * 32768).astype(np.int16)
+                now = time.time()
+        
+                for sample in audio:
+                    audio_buffer.append((now, sample))
+        
+                last_audio_time = now
+                print("🎤 Audio received:", len(audio))
+        
+            except zmq.Again:
+                pass
 
-            now = time.time()
+        # # ======================
+        # # 🔊 AUDIO RECEIVE
+        # # ======================
+        # try:
+        #     if is_speaking:
+        #         continue
+        
+        #     raw_audio = audio_socket.recv(zmq.NOBLOCK)
+        #     audio = np.frombuffer(raw_audio, dtype='float32')
+        #     audio = (audio * 32768).astype(np.int16)
 
-            for sample in audio:
-                audio_buffer.append((now, sample))
+        #     now = time.time()
 
-            last_audio_time = now
-            print("🎤 Audio received:", len(audio))
+        #     for sample in audio:
+        #         audio_buffer.append((now, sample))
 
-        except zmq.Again:
-            pass
+        #     last_audio_time = now
+        #     print("🎤 Audio received:", len(audio))
+
+        # except zmq.Again:
+        #     pass
         
         # ======================
         # 🔥 STATE MACHINE
@@ -361,19 +400,29 @@ def main():
 
             is_speaking = True
             send_cmd(f"speak:{intro_text_spa}")
-            time.sleep(len(intro_text_spa) * 0.09 + 4)
-            is_speaking = False
-        
+            # time.sleep(len(intro_text_spa) * 0.09 + 4)
+            speak_end_time = time.time() + len(intro_text_spa) * 0.07 + 1.0
+            next_state = "ask_question"
+            state = "speaking"
+
+            print("🔥 INTRO SENT")
+            continue
+
+        elif state == "speaking":
+            if time.time() > speak_end_time:
+                is_speaking = False
+                state = next_state
+
+        elif state == "start_listening":
             frame_buffer.clear()
             audio_buffer.clear()
             infer.frame_buffer.clear()
         
+            human_start = None
+            camera_active = True
             last_audio_time = time.time()
         
-            state = "ask_question"
-            time.sleep(1.5)
-            print("🔥 INTRO SENT")
-            continue
+            state = "collecting"
         
         elif state == "ask_question":
             if question_idx >= len(QUESTIONS_SPA):
@@ -381,83 +430,15 @@ def main():
                 break
 
             use_real_inference = (question_idx == len(QUESTIONS_SPA) - 1)
-
             question = QUESTIONS_SPA[question_idx]
-            print(f"🗣️ Question: {question}")
-
-            speech_time = len(question) * 0.065
-
+        
             is_speaking = True
             send_cmd(f"speak:{question}")
-            time.sleep(speech_time + 1.0)
-
-            # 🔥 residual audio 제거
-            audio_buffer.clear()
-            frame_buffer.clear()
-            infer.frame_buffer.clear()
-            
-            last_audio_time = time.time()
-            
-            is_speaking = False
-            
-            human_start = None
-            last_audio_time = time.time()
-            
-            camera_active = True
-            state = "collecting"
-            
-            # 🔥 Decide inference Option
-            # if question_idx == len(QUESTIONS_SPA) - 1:
-            #     use_real_inference = True
-                
-            #     frame_buffer.clear()
-            #     audio_buffer.clear()
-            #     infer.frame_buffer.clear()
-                
-            #     human_start = None
-            #     is_speaking = True
-            #     # time.sleep(len(question) * 0.07 + 1.5)
-            #     speech_time = len(QUESTIONS_SPA[question_idx]) * 0.065
-
-            #     is_speaking = False
-            #     time.sleep(speech_time + 1.0)
-                
-            #     frame_buffer.clear()
-            #     audio_buffer.clear()
-            #     infer.frame_buffer.clear()
-            #     last_audio_time = time.time()
-
-            #     camera_active = True
-            #     state = "collecting"
-                
-            # else:
-            #     use_real_inference = False
-
-            #     frame_buffer.clear()
-            #     audio_buffer.clear()
-            #     infer.frame_buffer.clear()
-            
-            #     human_start = None
-            
-            #     speech_time = len(question) * 0.065
-            #     time.sleep(speech_time + 1.0)
-
-            #     frame_buffer.clear()
-            #     audio_buffer.clear()
-            #     infer.frame_buffer.clear()
-            #     last_audio_time = time.time()
-            
-            #     camera_active = True
-            #     state = "collecting"
-                
-            #     # PREDEFINED = ["HAPPY", "ANGRY", "DANCE", "SAD", "FRUSTRATED", "NEUTRAL"]
-            #     # current_emotion = PREDEFINED[question_idx]
-
-            #     # speech_time = len(question) * 0.065
-            #     # time.sleep(speech_time + 1.0)
-
-            #     # state = "react"
-            #     # continue
+        
+            speak_end_time = time.time() + len(question)*0.07 + 1.0
+            next_state = "start_listening"
+            state = "speaking"
+            continue
             
         elif state == "next_question":
             question_idx += 1
@@ -502,9 +483,8 @@ def main():
                 valid_face_frames = len(frame_buffer)
 
                 if ((now - human_start > min_listen_time) and
-                    (now - last_audio_time > 3.0) and 
                     valid_face_frames > 15) or \
-                    (now - human_start > max_wait_time):
+                   (now - human_start > max_wait_time):
                     human_end = now
                     state = "predict"
 
@@ -579,36 +559,19 @@ def main():
         elif state == "react":
             print("🟠 REACT")
         
-            # 🔥 motion
             send_emotion_udp(current_emotion)
-        
-            # 👉 motion duration
-            motion_duration = 3.0
-            time.sleep(motion_duration)
-        
-            # 🔥 speech
-            speech_list = EMOTION_SPEECH_SPA_MAP.get(current_emotion, ["Entiendo."])
-            speech = random.choice(speech_list)
 
+            time.sleep(2.5)
+        
+            speech = random.choice(EMOTION_SPEECH_SPA_MAP.get(current_emotion, ["Entiendo."]))
+        
             is_speaking = True
-            
             send_cmd(f"speak:{speech}")
         
-            # 👉 wait during user's speech
-            time.sleep(len(speech) * 0.07 + 1.5)
-
-            is_speaking = False
-        
-            # 🔥 reset
-            camera_active = False
-            human_start = None
-        
-            frame_buffer.clear()
-            audio_buffer.clear()
-            infer.frame_buffer.clear()
-
-            time.sleep(1.0)
-            state = "next_question"
+            speak_end_time = time.time() + len(speech)*0.07 + 1.5
+            next_state = "next_question"
+            state = "speaking"
+            continue
 
         # Check FPS
         fps = 1 / (time.time() - loop_start + 1e-6)
