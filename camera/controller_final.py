@@ -258,7 +258,9 @@ def send_cmd(cmd):
             s.sendall(cmd.encode('utf-8'))
             try:
                 s.recv(1024)
+                print("✅ robot responded")
             except:
+                print("⚠️ no response from robot")
                 pass
     except Exception as e:
         print("❌ CMD send error:", e)
