@@ -400,7 +400,7 @@ def main():
         
             send_cmd(f"speak:{intro_text_spa}")
         
-            time.sleep(len(intro_text_spa) * 0.09 + 4.0)  # 🔥 핵심
+            time.sleep(len(intro_text_spa) * 0.11 + 4.0)  # 🔥 핵심
         
             state = "ask_question"
             print("➡️ next_state:", next_state)
@@ -446,8 +446,7 @@ def main():
             print(f"🗣️ Asking: {question}")
             send_cmd(f"speak:{question}")
         
-            # 🔥 핵심: speaking state 제거
-            time.sleep(len(question) * 0.11 + 3.0)
+            time.sleep(len(question) * 0.11 + 4.0)
         
             state = "start_listening"
             continue
