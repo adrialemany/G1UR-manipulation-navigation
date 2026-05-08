@@ -255,7 +255,10 @@ def send_cmd(cmd):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(1.0)
             s.connect((ROBOT_IP, 6000))
-            s.sendall(cmd.encode('utf-8'))
+            
+            msg = cmd + "\n"
+            s.sendall(msg.encode('utf-8'))
+            
             try:
                 s.recv(1024)
                 print("✅ robot responded")
