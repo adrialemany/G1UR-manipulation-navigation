@@ -371,7 +371,7 @@ def main():
         
             send_cmd(f"speak:{intro_text_spa}")
         
-            time.sleep(len(intro_text_spa) * 0.08 + 5.0)
+            time.sleep(len(intro_text_spa) * 0.08 + 8.0)
         
             state = "ask_question"
             print("➡️ next_state:", next_state)
