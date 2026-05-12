@@ -274,7 +274,7 @@ def send_cmd(cmd):
             s.sendall(msg.encode('utf-8'))
             
             try:
-                s.recv(1024)
+                # s.recv(1024)
                 print("✅ robot responded")
             except:
                 print("⚠️ no response from robot")
@@ -283,9 +283,9 @@ def send_cmd(cmd):
         print("❌ CMD send error:", e)
 
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect((ROBOT_IP, 6000))
-sock.settimeout(2.0)
+# sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# sock.connect((ROBOT_IP, 6000))
+# sock.settimeout(2.0)
 
 # ======================
 # 🔥 main
@@ -323,7 +323,7 @@ def main():
     # intro_text_eng = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
     intro_text_spa = "Hola, ¡encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. ¡Empecemos!"
 
-    time.sleep(4.0)
+    time.sleep(7.0)
     
     # ======================
     # 🔥 QUESTION LOOP
@@ -371,7 +371,7 @@ def main():
         
             send_cmd(f"speak:{intro_text_spa}")
         
-            time.sleep(len(intro_text_spa) * 0.08 + 4.0)
+            time.sleep(len(intro_text_spa) * 0.08 + 5.0)
         
             state = "ask_question"
             print("➡️ next_state:", next_state)
