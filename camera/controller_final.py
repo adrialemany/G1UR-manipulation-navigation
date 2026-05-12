@@ -471,7 +471,7 @@ def main():
             audio_samples  = slice_by_time(audio_buffer, human_start, human_end)
             max_len = 16000 * 6
             
-            if len(frames) < 8:
+            if len(frames) < 2:
                 current_emotion = "NEUTRAL"
                 state = "react"
                 continue
