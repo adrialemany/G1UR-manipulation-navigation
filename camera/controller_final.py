@@ -191,7 +191,8 @@ QUESTIONS_SPA = [
     "Hay algo próximamente que estes esperando con muchas ganas?",
 
     # SAD
-    "Has tenido algun momento ultimamente que se te haya quedado en la mente más de lo que esperabas?",
+    # "Has tenido algun momento ultimamente que se te haya quedado en la mente más de lo que esperabas?",
+    "Has tenido algun momento que no puedes dejar de pensar?",
 
     # FRUSTRATED
     # "Has estado trabajando en algo recientemente que no salio tan bien como esperabas?",
