@@ -166,7 +166,8 @@ QUESTIONS_ENG = [
     "Have you had a moment lately that stayed on your mind longer than you expected?",
 
     # FRUSTRATED
-    "Have you been working on something recently that didn’t go as smoothly as you hoped?",
+    # "Have you been working on something recently that didn’t go as smoothly as you hoped?"
+    "Algo recientemente fue mas dificil de lo esperado?",
 
     # NEUTRAL
     "How has your day been so far?",
