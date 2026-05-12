@@ -194,7 +194,8 @@ QUESTIONS_SPA = [
     "Has tenido algun momento ultimamente que se te haya quedado en la mente más de lo que esperabas?",
 
     # FRUSTRATED
-    "Has estado trabajando en algo recientemente que no salio tan bien como esperabas?",
+    # "Has estado trabajando en algo recientemente que no salio tan bien como esperabas?",
+    "Algo recientemente fue mas dificil de lo esperado?",
 
     # NEUTRAL
     "Como ha ido tu día hasta ahora?",
