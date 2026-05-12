@@ -283,9 +283,9 @@ def send_cmd(cmd):
         print("❌ CMD send error:", e)
 
 
-# sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# sock.connect((ROBOT_IP, 6000))
-# sock.settimeout(2.0)
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.connect((ROBOT_IP, 6000))
+sock.settimeout(2.0)
 
 # ======================
 # 🔥 main
