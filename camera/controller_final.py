@@ -321,7 +321,7 @@ def main():
     infer.frame_buffer.clear()
     
     # intro_text_eng = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
-    intro_text_spa = "Hola, ¡encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. ¡Empecemos!"
+    intro_text_spa = "Hola, encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. Empecemos!"
 
     time.sleep(7.0)
     
