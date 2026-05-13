@@ -5,7 +5,7 @@ import sounddevice as sd
 from gtts import gTTS
 
 # Configuración de Audio
-AUDIO_DEVICE = "hw:0,0"
+AUDIO_DEVICE = "hw:2,0"
 CHANNELS = 1
 RATE = 16000  
 CHUNK = 1024
