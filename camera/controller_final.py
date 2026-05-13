@@ -253,8 +253,14 @@ def wait_with_poll(duration, audio_socket):
             audio = (audio * 32768).astype(np.int16)
 
             now = time.time()
-            for sample in audio:
-                audio_buffer.append((now, sample))
+            # for sample in audio:
+            #     audio_buffer.append((now, sample))
+
+            chunk_duration = len(audio) / 16000.0
+
+            # for i, sample in enumerate(audio):
+            #     sample_time = now - chunk_duration + (i / 16000.0)
+            #     audio_buffer.append((sample_time, sample))
 
         except zmq.Again:
             pass
@@ -266,7 +272,8 @@ def wait_with_poll(duration, audio_socket):
 # 🔥 Buffers
 # ======================
 frame_buffer = collections.deque(maxlen=300)
-audio_buffer = collections.deque(maxlen=16000*6)
+# audio_buffer = collections.deque(maxlen=16000*6)
+audio_buffer = collections.deque(maxlen=16000*20)
 
 def slice_by_time(buffer, t_start, t_end):
     return [x for (t, x) in buffer if t_start <= t <= t_end]
@@ -361,8 +368,13 @@ def main():
 
             now = time.time()
 
-            for sample in audio:
-                audio_buffer.append((now, sample))
+            # for sample in audio:
+            #     audio_buffer.append((now, sample))
+            chunk_duration = len(audio) / 16000.0
+
+            for i, sample in enumerate(audio):
+                sample_time = now - chunk_duration + (i / 16000.0)
+                audio_buffer.append((sample_time, sample))
 
             last_audio_time = now
             print("🎤 Audio received:", len(audio))
@@ -503,8 +515,8 @@ def main():
             if len(wav) < max_len:
                 wav = np.pad(wav, (0, max_len - len(wav)))
             else:
-                # wav = wav[:max_len]
-                wav = wav[-16000*4:]
+                wav = wav[:max_len]
+                # wav = wav[-16000*4:]
 
             wav_tensor = torch.tensor(wav).float().unsqueeze(0).to(infer.device)
 
