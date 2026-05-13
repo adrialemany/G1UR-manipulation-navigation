@@ -405,7 +405,7 @@ def main():
         
             send_cmd(f"speak:{question}")
         
-            wait_time = len(question) * 0.11 + 3.0
+            wait_time = len(question) * 0.11 + 5.0
             wait_with_poll(wait_time, audio_socket)
         
             state = "start_listening"
