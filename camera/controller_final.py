@@ -280,7 +280,7 @@ def send_cmd(cmd):
             
             msg = cmd + "\n"
             s.sendall(msg.encode('utf-8'))
-            time.sleep(0.2)
+            # time.sleep(0.2)
             
             try:
                 # s.recv(1024)
@@ -380,7 +380,7 @@ def main():
         
             send_cmd(f"speak:{intro_text_spa}")
         
-            time.sleep(len(intro_text_spa) * 0.08 + 10.0)
+            time.sleep(len(intro_text_spa) * 0.08 + 8.0)
         
             state = "ask_question"
             print("➡️ next_state:", next_state)
