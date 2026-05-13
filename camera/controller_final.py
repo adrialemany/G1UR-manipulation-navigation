@@ -7,11 +7,16 @@ import torch
 import socket
 from PIL import Image
 import random
+import os
+import soundfile as sf
 
 from insightface.app import FaceAnalysis
 from inference import EmotionInference
 
 ROBOT_IP = "192.168.0.107"
+
+save_dir = "experiments_samples"
+os.makedirs(save_dir, exist_ok=True)
 
 # ======================
 # 🔥 Face Detector
@@ -507,6 +512,43 @@ def main():
                 # 🔥 inference
                 emotion = infer.predict(wav_tensor)
                 emotion_str = EMOTION_MAP.get(emotion, "NEUTRAL")
+
+                # =========================
+                # 🔥 SAVE DEBUG SAMPLE
+                # =========================
+                
+                timestamp = int(time.time())
+                
+                sample_dir = os.path.join(save_dir, f"sample_{timestamp}")
+                os.makedirs(sample_dir, exist_ok=True)
+                
+                # -------------------------
+                # save video frames
+                # -------------------------
+                for idx, frame in enumerate(frames):
+                    save_path = os.path.join(sample_dir, f"frame_{idx:03d}.jpg")
+                    cv2.imwrite(save_path, frame)
+                
+                # -------------------------
+                # save audio
+                # -------------------------
+                audio_save_path = os.path.join(sample_dir, "audio.wav")
+                
+                sf.write(
+                    audio_save_path,
+                    wav.astype(np.int16),
+                    16000
+                )
+                
+                # -------------------------
+                # save prediction txt
+                # -------------------------
+                with open(os.path.join(sample_dir, "result.txt"), "w") as f:
+                    f.write(f"Predicted Emotion: {emotion_str}\n")
+                    f.write(f"Num Frames: {len(frames)}\n")
+                    f.write(f"Audio Length: {len(wav)/16000:.2f} sec\n")
+                
+                print(f"💾 Saved debug sample to: {sample_dir}")
             else:
                 # 🔥 predefined
                 PREDEFINED = ["HAPPY", "ANGRY", "DANCE", "SAD", "FRUSTRATED", "NEUTRAL"]
