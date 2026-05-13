@@ -187,27 +187,27 @@ QUESTIONS_ENG = [
 QUESTIONS_SPA = [
 
     # HAPPY
-    "Puedes contarme algun momento reciente en el que sonreiste sin darte cuenta?",
+    "¿Puedes contarme algún momento reciente en el que sonreíste sin darte cuenta?",
 
     # ANGRY
-    "Ha habido alguna situacion recientemente en la que algo no salio como esperabas?",
+    "¿Ha habido alguna situación recientemente en la que algo no salió como esperabas?",
 
     # EXCITED
-    "Hay algo próximamente que estes esperando con muchas ganas?",
+    "¿Hay algo próximamente que estés esperando con muchas ganas?",
 
     # SAD
     # "Has tenido algun momento ultimamente que se te haya quedado en la mente más de lo que esperabas?",
-    "Has tenido algun momento que no puedes dejar de pensar?",
+    "¿Has tenido algun momento que no puedes dejar de pensar?",
 
     # FRUSTRATED
     # "Has estado trabajando en algo recientemente que no salio tan bien como esperabas?",
-    "Algo recientemente fue mas dificil de lo esperado?",
+    "¿Algo recientemente fue más dificil de lo esperado?",
 
     # NEUTRAL
-    "Como ha ido tu día hasta ahora?",
+    "¿Cómo ha ido tu día hasta ahora?",
 
     # freedom
-    "Hay algo que te gustaria compartir sobre tu día?"
+    "¿Hay algo que te gustaría compartir sobre tu día?"
 ]
 
 def send_emotion_udp(emotion_str):
@@ -330,7 +330,7 @@ def main():
     infer.frame_buffer.clear()
     
     # intro_text_eng = "Hi! Nice to meet you. Today, I’d like to talk with you about your recent experiences and feelings. There are no right or wrong answers, so feel free to speak comfortably. Let’s start!"
-    intro_text_spa = "Hola, encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y sentimientos recientes. No hay respuestas correctas o incorrectas, así que siéntete libre de hablar con tranquilidad. Empecemos!"
+    intro_text_spa = "Hola, encantado de conocerte! Hoy me gustaría hablar contigo sobre tus experiencias y emociones. No hay respuestas incorrectas. Empecemos!"
 
     time.sleep(10.0)
     
