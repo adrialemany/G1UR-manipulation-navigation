@@ -149,7 +149,9 @@ def main():
 
     threading.Thread(target=audio_stream_loop, args=(context,), daemon=True).start()
 
-    script2_path = os.path.join(SCRIPT_DIR, "emotions_g1.py")
+    #script2_path = os.path.join(SCRIPT_DIR, "emotions_g1.py") # this script for hand-made emotions
+    script2_path = os.path.join(SCRIPT_DIR, "emotions_g1_playback.py") #this script for teleoperated movements (more human-like)
+
     
     print(f"[*] Iniciando proceso de emociones: {script2_path}")
     # sys.executable asegura que use el mismo entorno de Python (útil si usas entornos virtuales de ROS2)
