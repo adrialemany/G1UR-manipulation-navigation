@@ -416,7 +416,7 @@ def main():
             question_idx += 1
 
             camera_active = False
-            time.sleep(2)
+            time.sleep(4)
             state = "ask_question"
 
         # ======================
