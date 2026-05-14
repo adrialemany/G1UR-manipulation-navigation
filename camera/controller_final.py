@@ -250,7 +250,8 @@ def wait_with_poll(duration, audio_socket):
         try:
             raw_audio = audio_socket.recv(zmq.NOBLOCK)
             audio = np.frombuffer(raw_audio, dtype='float32')
-            audio = (audio * 32768).astype(np.int16)
+            # audio = (audio * 32768).astype(np.int16)
+            audio = np.clip(audio, -1.0, 1.0)
 
             now = time.time()
             # for sample in audio:
@@ -579,7 +580,8 @@ def main():
                 
                 sf.write(
                     full_audio_path,
-                    full_wav.astype(np.int16),
+                    # full_wav.astype(np.int16),
+                    full_wav,
                     16000
                 )
                 
