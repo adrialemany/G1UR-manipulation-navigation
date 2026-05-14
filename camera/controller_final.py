@@ -486,6 +486,7 @@ def main():
                 ) or (
                     now - human_start > max_wait_time
                 ):
+                    human_end = now
                     state = "predict"
 
             except zmq.Again:
