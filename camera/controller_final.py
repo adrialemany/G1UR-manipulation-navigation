@@ -318,7 +318,7 @@ def main():
 
     # audio socket
     audio_socket = context.socket(zmq.SUB)
-    audio_socket.setsockopt(zmq.CONFLATE, 1)
+    # audio_socket.setsockopt(zmq.CONFLATE, 1)
     audio_socket.setsockopt_string(zmq.SUBSCRIBE, "")
     audio_socket.connect(f"tcp://{ROBOT_IP}:6003")
 
