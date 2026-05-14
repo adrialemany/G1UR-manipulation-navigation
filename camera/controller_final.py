@@ -258,9 +258,9 @@ def wait_with_poll(duration, audio_socket):
 
             chunk_duration = len(audio) / 16000.0
 
-            # for i, sample in enumerate(audio):
-            #     sample_time = now - chunk_duration + (i / 16000.0)
-            #     audio_buffer.append((sample_time, sample))
+            for i, sample in enumerate(audio):
+                sample_time = now - chunk_duration + (i / 16000.0)
+                audio_buffer.append((sample_time, sample))
 
         except zmq.Again:
             pass
@@ -508,16 +508,35 @@ def main():
 
             frames_tensor = torch.stack(processed).unsqueeze(0).to(infer.device)
             
-            if len(audio_samples) == 0:
-                wav = np.zeros(16000 * 6)
-            else:
-                wav = np.array(audio_samples)
+            # if len(audio_samples) == 0:
+            #     wav = np.zeros(16000 * 6)
+            # else:
+            #     wav = np.array(audio_samples)
 
+            # if len(wav) < max_len:
+            #     wav = np.pad(wav, (0, max_len - len(wav)))
+            # else:
+            #     wav = wav[:max_len]
+            #     # wav = wav[-16000*4:]
+
+            # =========================
+            # full audio for saving
+            # =========================
+            if len(audio_samples) == 0:
+                full_wav = np.zeros(16000)
+            else:
+                full_wav = np.array(audio_samples)
+            
+            # =========================
+            # inference audio
+            # =========================
+            wav = full_wav.copy()
+            
             if len(wav) < max_len:
                 wav = np.pad(wav, (0, max_len - len(wav)))
             else:
-                wav = wav[:max_len]
-                # wav = wav[-16000*4:]
+                # 마지막 6초 사용
+                wav = wav[-max_len:]
 
             wav_tensor = torch.tensor(wav).float().unsqueeze(0).to(infer.device)
 
@@ -542,13 +561,35 @@ def main():
                     save_path = os.path.join(sample_dir, f"frame_{idx:03d}.jpg")
                     cv2.imwrite(save_path, frame)
                 
+                # # -------------------------
+                # # save audio
+                # # -------------------------
+                # audio_save_path = os.path.join(sample_dir, "audio.wav")
+                
+                # sf.write(
+                #     audio_save_path,
+                #     wav.astype(np.int16),
+                #     16000
+                # )
+
                 # -------------------------
-                # save audio
+                # save full audio
                 # -------------------------
-                audio_save_path = os.path.join(sample_dir, "audio.wav")
+                full_audio_path = os.path.join(sample_dir, "full_audio.wav")
                 
                 sf.write(
-                    audio_save_path,
+                    full_audio_path,
+                    full_wav.astype(np.int16),
+                    16000
+                )
+                
+                # -------------------------
+                # save inference audio
+                # -------------------------
+                inference_audio_path = os.path.join(sample_dir, "inference_audio.wav")
+                
+                sf.write(
+                    inference_audio_path,
                     wav.astype(np.int16),
                     16000
                 )
@@ -559,7 +600,8 @@ def main():
                 with open(os.path.join(sample_dir, "result.txt"), "w") as f:
                     f.write(f"Predicted Emotion: {emotion_str}\n")
                     f.write(f"Num Frames: {len(frames)}\n")
-                    f.write(f"Audio Length: {len(wav)/16000:.2f} sec\n")
+                    # f.write(f"Audio Length: {len(wav)/16000:.2f} sec\n")
+                    f.write(f"Audio Length: {len(full_wav)/16000:.2f} sec\n")
                 
                 print(f"💾 Saved debug sample to: {sample_dir}")
             else:
