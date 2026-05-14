@@ -355,6 +355,7 @@ def main():
     use_real_inference = False
     speak_end_time = 0
     next_state = None
+    current_audio_energy = 0.0
 
     while True:
         loop_start = time.time()
@@ -365,7 +366,10 @@ def main():
         try:
             raw_audio = audio_socket.recv(zmq.NOBLOCK)
             audio = np.frombuffer(raw_audio, dtype='float32')
-            audio = (audio * 32768).astype(np.int16)
+            # audio = (audio * 32768).astype(np.int16)
+            audio = np.clip(audio, -1.0, 1.0)
+
+            current_audio_energy = np.abs(audio).mean()
 
             now = time.time()
 
@@ -377,7 +381,7 @@ def main():
                 sample_time = now - chunk_duration + (i / 16000.0)
                 audio_buffer.append((sample_time, sample))
 
-            last_audio_time = now
+            # last_audio_time = now
             print("🎤 Audio received:", len(audio))
 
         except zmq.Again:
@@ -450,6 +454,9 @@ def main():
                     continue
 
                 now = time.time()
+
+                if current_audio_energy > 0.01:
+                    last_audio_time = now
                 
                 face = None
                 
@@ -465,14 +472,20 @@ def main():
                     frame_buffer.append((now, face))
                     infer.update_frame(face)
                     
-                min_listen_time = 3.0
+                min_listen_time = 10.0
                 max_wait_time = 20.0
                 valid_face_frames = len(frame_buffer)
 
-                if ((now - human_start > min_listen_time) and
-                    valid_face_frames > 15) or \
-                   (now - human_start > max_wait_time):
-                    human_end = now
+                silence_threshold = 2.0
+
+                # if ((now - human_start > min_listen_time) and
+                #     valid_face_frames > 15) or \
+                if (
+                    (now - human_start > min_listen_time) and
+                    (now - last_audio_time > silence_threshold)
+                ) or (
+                    now - human_start > max_wait_time
+                ):
                     state = "predict"
 
             except zmq.Again:
@@ -492,7 +505,7 @@ def main():
 
             frames = slice_by_time(frame_buffer, human_start, human_end)
             audio_samples  = slice_by_time(audio_buffer, human_start, human_end)
-            max_len = 16000 * 6
+            max_len = 16000 * 10
             
             if len(frames) < 2:
                 current_emotion = "NEUTRAL"
@@ -592,7 +605,8 @@ def main():
                 
                 sf.write(
                     inference_audio_path,
-                    wav.astype(np.int16),
+                    # wav.astype(np.int16),
+                    wav,
                     16000
                 )
                 
