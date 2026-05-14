@@ -287,7 +287,7 @@ def send_cmd(cmd):
             
             msg = cmd + "\n"
             s.sendall(msg.encode('utf-8'))
-            time.sleep(1.0)
+            time.sleep(0.2)
             
             try:
                 # s.recv(1024)
