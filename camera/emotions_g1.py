@@ -369,11 +369,11 @@ class G1PhysicalEmotions(Node):
             pose_giro = [-2.5, 0.3, 0.0, 0.5, 0.0, -0.0, 0.4]
             
             for _ in range(2):
-                send_walk_cmd('a') 
+                # send_walk_cmd('a') 
                 self.move_to_pose(pose_arriba, duration=1.1)
                 self.wait_until_reached()
                 self.led_queue.put("ORANGE")
-                send_walk_cmd('d')
+                # send_walk_cmd('d')
                 self.move_to_pose(pose_abajo, duration=1.1)
                 self.wait_until_reached()
                 self.led_queue.put("ORANGE")
