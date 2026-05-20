@@ -10,3 +10,6 @@ ERROR: could not create window
 Thu May  7 17:00:10 2026
 ERROR: could not create window
 
+Wed May 13 18:51:00 2026
+ERROR: could not create window
+

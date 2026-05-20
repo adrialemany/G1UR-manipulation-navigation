@@ -9,6 +9,50 @@ import os
 import socket
 import sys
 import csv
+import pandas as pd
+import h5py
+
+    def load_recording(self, emotion):
+        """Lee el archivo .parquet o .h5 y extrae solo la cintura y los brazos, ignorando manos y piernas."""
+        frames = []
+        
+        # Soportamos ambos formatos por si tus compañeros te pasan uno u otro
+        filepath_parquet = os.path.join(self.recordings_dir, f"{emotion}.parquet")
+        filepath_h5 = os.path.join(self.recordings_dir, f"{emotion}.h5")
+        
+        raw_data = []
+        
+        try:
+            if os.path.exists(filepath_parquet):
+                df = pd.read_parquet(filepath_parquet)
+                # En los datasets de NVIDIA/LeRobot, el estado suele ser una columna con listas
+                # o múltiples columnas. Adaptamos para la lista anidada:
+                if 'observation.state' in df.columns:
+                    raw_data = df['observation.state'].tolist()
+                    
+            elif os.path.exists(filepath_h5):
+                with h5py.File(filepath_h5, 'r') as f:
+                    # En archivos HDF5 de teleoperación (Robomimic), el estado suele estar aquí
+                    raw_data = f['obs']['state'][:]
+            else:
+                print(f"[ERROR] No se encontró {emotion}.parquet ni {emotion}.h5 en {self.recordings_dir}")
+                return frames
+                
+            # --- LA CIRUGÍA DE ÍNDICES ---
+            for row in raw_data:
+                # Recortamos el array de 43 valores usando la información del modality.json
+                waist = row[12:15]       # Cintura (3)
+                left_arm = row[15:22]    # Brazo izquierdo (7)
+                right_arm = row[29:36]   # Brazo derecho (7) -> ¡Saltamos los índices 22-28 que son la mano!
+                
+                # Juntamos los 17 motores en el orden que espera nuestro control_loop
+                frame_17_motors = list(waist) + list(left_arm) + list(right_arm)
+                frames.append(frame_17_motors)
+                
+        except Exception as e:
+            print(f"[ERROR] Fallo al decodificar la grabación de {emotion}: {e}")
+            
+        return frames
 
 # Inicializamos el canal de Unitree para los LEDs
 sdk_path = "/root/unitree_sdk2_python"
@@ -115,7 +159,7 @@ class G1PlaybackEmotions(Node):
         print(f"\n▶️ Reproduciendo grabación de: {emotion}")
         
         # 1. Cargamos el archivo de la memoria de los compañeros
-        frames = self.load_csv(emotion)
+        frames = self.load_recording(emotion)
         if not frames: return
         
         # 2. Luces y comportamientos específicos
