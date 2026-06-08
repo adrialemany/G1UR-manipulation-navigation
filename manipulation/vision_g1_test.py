@@ -557,7 +557,9 @@ def main():
                 target_z = max(memoria_caja['z_mesa'] + 0.15, LIMITE_Z_SEGURO + 0.05)
                 tgt_l = np.array([centro[0] - 0.10, centro[1] + medio_ancho + 0.15, target_z])
                 tgt_r = np.array([centro[0] - 0.10, centro[1] - medio_ancho - 0.15, target_z])
-                robot.lock_shoulder_roll, robot.lock_elbows_wrists, robot.use_6d = True, False, False
+                
+                # Todo libre para viajar a la posición de preparación sin retorcerse
+                robot.lock_shoulder_roll, robot.lock_elbows_wrists, robot.use_6d = False, False, False
                 robot.set_targets(tgt_l, tgt_r)
                 estado, tiempo_estado = "MOVIENDO_PREPARAR", now
 
@@ -581,14 +583,13 @@ def main():
                     estado, tiempo_estado = "ALINEAR_PALMAS", now
 
             elif estado == "ALINEAR_PALMAS":
-                # Mantenemos lock_shoulder_roll activado para obligar a usar codos y muñecas
-                robot.use_6d, robot.lock_shoulder_roll = True, True
+                # Activamos 6D para las palmas, pero DEJAMOS LIBRE EL HOMBRO
+                robot.use_6d, robot.lock_shoulder_roll = True, False
                 
                 ang = 0.8
                 R_l = np.array([[1, 0, 0], [0, math.cos(-ang), -math.sin(-ang)], [0, math.sin(-ang), math.cos(-ang)]])
                 R_r = np.array([[1, 0, 0], [0, math.cos(ang), -math.sin(ang)], [0, math.sin(ang), math.cos(ang)]])
                 
-                # Calculamos sobre la rotación pura actual
                 robot.target_rot_l = R_l @ robot.data.oMf[robot.left_hand_id].rotation.copy()
                 robot.target_rot_r = R_r @ robot.data.oMf[robot.right_hand_id].rotation.copy()
 
@@ -605,14 +606,13 @@ def main():
 
             elif estado == "MOVIENDO_ALINEAR":
                 if robot.get_max_error() < 0.05 or (now - tiempo_estado > 4.0):
-                    # Heredamos la Z objetivo matemática, no la real, para no atascar el descenso
                     z_descenso_actual = float(robot.target_l[2]) 
                     z_descenso_obj = max((memoria_caja['centro'][2] + memoria_caja['z_mesa']) / 2.0, LIMITE_Z_SEGURO)
                     estado, tiempo_estado = "BAJAR_MANOS", now
 
             elif estado == "BAJAR_MANOS":
-                # CRÍTICO: NO liberar el lock_shoulder_roll aquí. Mantenerlo True.
-                robot.lock_shoulder_roll = True 
+                # Seguimos con hombro libre para bajar naturalmente
+                robot.lock_shoulder_roll = False 
                 
                 z_descenso_actual = z_descenso_actual - VELOCIDAD_DESCENSO if (z_descenso_actual - VELOCIDAD_DESCENSO) >= z_descenso_obj else z_descenso_obj
                 
