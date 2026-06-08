@@ -632,11 +632,8 @@ def main():
             elif estado == "CERRAR_AGARRE":
                 robot.lock_shoulder_roll = False
                 centro = memoria_caja['centro']
-                
-                # Penetración de 4.5 cm por lado para asegurar contacto
                 borde_l = centro[1] + (memoria_caja['width'] / 2.0) - 0.045
                 borde_r = centro[1] - (memoria_caja['width'] / 2.0) + 0.045
-                
                 dist_l = float(robot.hand_l_actual[1]) - borde_l
                 dist_r = borde_r - float(robot.hand_r_actual[1])
 
@@ -645,14 +642,8 @@ def main():
                 elif not robot.traj_l and not robot.traj_r:
                     paso_l, paso_r = min(0.01, max(0.0, dist_l)), min(0.01, max(0.0, dist_r))
                     tgt_x = centro[0] + (PROFUNDIDAD_CAJA_REAL / 2.0) - LONGITUD_MANO
-                    
-                    # 🚀 AQUÍ APLICAMOS EL OFFSET DE +3 CM HACIA ARRIBA para no raspar la mesa
-                    z_agarre_seguro = z_descenso_obj + 0.03
-                    
-                    robot.set_targets(
-                        np.array([tgt_x, robot.hand_l_actual[1] - paso_l, z_agarre_seguro]), 
-                        np.array([tgt_x, robot.hand_r_actual[1] + paso_r, z_agarre_seguro])
-                    )
+                    robot.set_targets(np.array([tgt_x, robot.hand_l_actual[1] - paso_l, z_descenso_obj]), 
+                                      np.array([tgt_x, robot.hand_r_actual[1] + paso_r, z_descenso_obj]))
 
             elif estado == "LEVANTAR_RETRAER":
                 # 🚀 CRÍTICO: Mantenemos el control 6D para que las palmas no se giren
