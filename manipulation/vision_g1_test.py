@@ -632,8 +632,11 @@ def main():
             elif estado == "CERRAR_AGARRE":
                 robot.lock_shoulder_roll = False
                 centro = memoria_caja['centro']
+                
+                # Penetración de 4.5 cm por lado para asegurar contacto
                 borde_l = centro[1] + (memoria_caja['width'] / 2.0) - 0.045
                 borde_r = centro[1] - (memoria_caja['width'] / 2.0) + 0.045
+                
                 dist_l = float(robot.hand_l_actual[1]) - borde_l
                 dist_r = borde_r - float(robot.hand_r_actual[1])
 
@@ -642,14 +645,36 @@ def main():
                 elif not robot.traj_l and not robot.traj_r:
                     paso_l, paso_r = min(0.01, max(0.0, dist_l)), min(0.01, max(0.0, dist_r))
                     tgt_x = centro[0] + (PROFUNDIDAD_CAJA_REAL / 2.0) - LONGITUD_MANO
-                    robot.set_targets(np.array([tgt_x, robot.hand_l_actual[1] - paso_l, z_descenso_obj]), 
-                                      np.array([tgt_x, robot.hand_r_actual[1] + paso_r, z_descenso_obj]))
+                    
+                    # 🚀 AQUÍ APLICAMOS EL OFFSET DE +3 CM HACIA ARRIBA para no raspar la mesa
+                    z_agarre_seguro = z_descenso_obj + 0.03
+                    
+                    robot.set_targets(
+                        np.array([tgt_x, robot.hand_l_actual[1] - paso_l, z_agarre_seguro]), 
+                        np.array([tgt_x, robot.hand_r_actual[1] + paso_r, z_agarre_seguro])
+                    )
 
             elif estado == "LEVANTAR_RETRAER":
-                robot.lock_shoulder_roll = True
-                tgt_l, tgt_r = robot.hand_l_actual.copy(), robot.hand_r_actual.copy()
-                tgt_l[0] = 0.20; tgt_r[0] = 0.20
-                tgt_l[2] += 0.05; tgt_r[2] += 0.05
+                # 🚀 CRÍTICO: Mantenemos el control 6D para que las palmas no se giren
+                robot.use_6d = True
+                robot.lock_shoulder_roll = False
+                
+                centro = memoria_caja['centro']
+                
+                # Retraemos la caja 5 cm hacia el pecho para un centro de masa más estable
+                tgt_x_retraido = centro[0] + (PROFUNDIDAD_CAJA_REAL / 2.0) - LONGITUD_MANO - 0.05
+                
+                # Mantener EXACTAMENTE la misma separación Y de agarre para no soltarla
+                borde_l_y = centro[1] + (memoria_caja['width'] / 2.0) - 0.045
+                borde_r_y = centro[1] - (memoria_caja['width'] / 2.0) + 0.045
+                
+                # Subimos 10 cm desde el punto de agarre seguro
+                z_levante_1 = z_descenso_obj + 0.03 + 0.10
+                
+                # Construimos un target 100% simétrico basado en la caja, no en el error del robot
+                tgt_l = np.array([tgt_x_retraido, borde_l_y, z_levante_1])
+                tgt_r = np.array([tgt_x_retraido, borde_r_y, z_levante_1])
+                
                 robot.set_targets(tgt_l, tgt_r)
                 estado, tiempo_estado = "MOVIENDO_RETRAER", now
 
@@ -658,14 +683,22 @@ def main():
                     estado, tiempo_estado = "LEVANTAR_SUBIR", now
 
             elif estado == "LEVANTAR_SUBIR":
-                tgt_l, tgt_r = robot.hand_l_actual.copy(), robot.hand_r_actual.copy()
-                tgt_l[2] = 0.40; tgt_r[2] = 0.40
+                robot.use_6d = True
+                robot.lock_shoulder_roll = False
+                
+                # Usamos los targets perfectos del paso anterior y los subimos puramente en vertical
+                tgt_l = robot.target_l.copy()
+                tgt_r = robot.target_r.copy()
+                
+                tgt_l[2] += 0.15  # Sube otros 15 cm
+                tgt_r[2] += 0.15
+                
                 robot.set_targets(tgt_l, tgt_r)
                 estado, tiempo_estado = "MOVIENDO_SUBIR", now
 
             elif estado == "MOVIENDO_SUBIR":
                 if robot.get_max_error() < 0.04 or (now - tiempo_estado > 5.0):
-                    print("[ESTADO] ✅ Caja levantada con éxito.")
+                    print("[ESTADO] ✅ Caja levantada de forma perfectamente simétrica.")
                     estado, tiempo_estado = "FINALIZADO", now
 
             time.sleep(max(0.0, DT - (time.time() - t_loop)))
