@@ -453,9 +453,9 @@ class BimanalIK(Node):
             cmd.motor_cmd[g1_idx].q, cmd.motor_cmd[g1_idx].dq, cmd.motor_cmd[g1_idx].tau, cmd.motor_cmd[g1_idx].kp, cmd.motor_cmd[g1_idx].kd = float(self.q_math[q_idx]), 0.0, 0.0, KP, KD
 
         for wi in G1_WAIST:
-        cmd.motor_cmd[wi].q = 0.0 # Siempre recto
-        cmd.motor_cmd[wi].kp = KP * 2.0
-        cmd.motor_cmd[wi].kd = KD * 2.0
+            cmd.motor_cmd[wi].q = 0.0 # Siempre recto
+            cmd.motor_cmd[wi].kp = KP * 2.0
+            cmd.motor_cmd[wi].kd = KD * 2.0
 
         cmd.motor_cmd[NOT_USED_JOINT].q = 1.0
         self.cmd_pub.publish(cmd)
