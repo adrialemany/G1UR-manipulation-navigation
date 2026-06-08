@@ -186,31 +186,31 @@ class VisionProcess(multiprocessing.Process):
                 detected = False
                 if len(results[0].boxes) > 0:
                     annotated = results[0].plot()
-        cajas_validas = []
+                    cajas_validas = []
     
-        for box in results[0].boxes:
+                    for box in results[0].boxes:
         # 1. Filtro de Clase: Asegúrate de que el ID (ej: 0) corresponde a tu caja
         # Cambia el 0 por el ID de tu clase si es diferente.
-            if int(box.cls[0]) != 0: 
-                continue
+                        if int(box.cls[0]) != 0: 
+                            continue
             
-            x1_c, y1_c, x2_c, y2_c = map(int, box.xyxy[0])
+                        x1_c, y1_c, x2_c, y2_c = map(int, box.xyxy[0])
         
         # 2. Filtro de Posición (Censurar los brazos):
         # Ignorar detecciones que estén en el tercio inferior de la imagen
         # (que es por donde asoman los brazos del G1)
-            if y2_c > IMG_H * 0.85: 
-                continue
+                        if y2_c > IMG_H * 0.85: 
+                            continue
             
-            cajas_validas.append(box)
+                        cajas_validas.append(box)
 
-        if cajas_validas:
+                    if cajas_validas:
         # Ahora sí, de las válidas, cogemos la de mayor confianza
-            best_box = max(cajas_validas, key=lambda b: float(b.conf[0]))
-            x1_c, y1_c, x2_c, y2_c = map(int, best_box.xyxy[0])
-        else:
+                        best_box = max(cajas_validas, key=lambda b: float(b.conf[0]))
+                        x1_c, y1_c, x2_c, y2_c = map(int, best_box.xyxy[0])
+                    else:
         # Si todo lo que vio eran brazos, ignoramos este frame
-            detected = False
+                        detected = False
 
                     x1_d = int(np.clip(x1_c * sx, 0, IMG_W - 1))
                     y1_d = int(np.clip(y1_c * sy, 0, IMG_H - 1))
