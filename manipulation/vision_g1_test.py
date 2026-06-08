@@ -384,14 +384,23 @@ class BimanalIK(Node):
         return [start + (i / n) * (end - start) for i in range(1, n + 1)]
 
     def set_targets(self, tgt_l, tgt_r):
-        self.sync_with_reality()
-        self.traj_l = self._make_traj(self.hand_l_actual, tgt_l)
-        self.traj_r = self._make_traj(self.hand_r_actual, tgt_r)
+        if not self.active_ik:
+            # Si estaba quieto, sincronizamos con la realidad
+            self.sync_with_reality()
+            start_l = self.hand_l_actual
+            start_r = self.hand_r_actual
+        else:
+            # 100% CONTINUIDAD: Iniciamos la nueva trayectoria donde terminó la anterior
+            start_l = self.target_l if self.target_l is not None else self.hand_l_actual
+            start_r = self.target_r if self.target_r is not None else self.hand_r_actual
+
+        self.traj_l = self._make_traj(start_l, tgt_l)
+        self.traj_r = self._make_traj(start_r, tgt_r)
+        
         self.target_l = self.traj_l.pop(0) if self.traj_l else tgt_l
         self.target_r = self.traj_r.pop(0) if self.traj_r else tgt_r
         self.final_tgt_l, self.final_tgt_r = tgt_l.copy(), tgt_r.copy()
         self.active_ik = True
-
     def get_max_error(self):
         if self.final_tgt_l is None or self.final_tgt_r is None: return 999.0
         return max(np.linalg.norm(self.final_tgt_l - self.hand_l_actual), np.linalg.norm(self.final_tgt_r - self.hand_r_actual))
@@ -572,39 +581,50 @@ def main():
                     estado, tiempo_estado = "ALINEAR_PALMAS", now
 
             elif estado == "ALINEAR_PALMAS":
-                pin.forwardKinematics(robot.model, robot.data, robot.q_math)
-                pin.updateFramePlacements(robot.model, robot.data)
+                # Mantenemos lock_shoulder_roll activado para obligar a usar codos y muñecas
+                robot.use_6d, robot.lock_shoulder_roll = True, True
+                
                 ang = 0.8
                 R_l = np.array([[1, 0, 0], [0, math.cos(-ang), -math.sin(-ang)], [0, math.sin(-ang), math.cos(-ang)]])
                 R_r = np.array([[1, 0, 0], [0, math.cos(ang), -math.sin(ang)], [0, math.sin(ang), math.cos(ang)]])
+                
+                # Calculamos sobre la rotación pura actual
                 robot.target_rot_l = R_l @ robot.data.oMf[robot.left_hand_id].rotation.copy()
                 robot.target_rot_r = R_r @ robot.data.oMf[robot.right_hand_id].rotation.copy()
-                robot.use_6d, robot.lock_shoulder_roll = True, True
 
                 centro = memoria_caja['centro']
                 medio_ancho = memoria_caja['width'] / 2.0
                 z_sobre = max(LIMITE_Z_SEGURO + 0.18, centro[2] + 0.12)
                 tgt_x = centro[0] + (PROFUNDIDAD_CAJA_REAL / 2.0) - LONGITUD_MANO
-                robot.set_targets(np.array([tgt_x, centro[1] + medio_ancho + 0.15, z_sobre]), 
-                                  np.array([tgt_x, centro[1] - medio_ancho - 0.15, z_sobre]))
+                
+                robot.set_targets(
+                    np.array([tgt_x, centro[1] + medio_ancho + 0.15, z_sobre]), 
+                    np.array([tgt_x, centro[1] - medio_ancho - 0.15, z_sobre])
+                )
                 estado, tiempo_estado = "MOVIENDO_ALINEAR", now
 
             elif estado == "MOVIENDO_ALINEAR":
                 if robot.get_max_error() < 0.05 or (now - tiempo_estado > 4.0):
-                    z_descenso_actual = float(robot.hand_l_actual[2])
+                    # Heredamos la Z objetivo matemática, no la real, para no atascar el descenso
+                    z_descenso_actual = float(robot.target_l[2]) 
                     z_descenso_obj = max((memoria_caja['centro'][2] + memoria_caja['z_mesa']) / 2.0, LIMITE_Z_SEGURO)
                     estado, tiempo_estado = "BAJAR_MANOS", now
 
             elif estado == "BAJAR_MANOS":
-                robot.lock_shoulder_roll = False
+                # CRÍTICO: NO liberar el lock_shoulder_roll aquí. Mantenerlo True.
+                robot.lock_shoulder_roll = True 
+                
                 z_descenso_actual = z_descenso_actual - VELOCIDAD_DESCENSO if (z_descenso_actual - VELOCIDAD_DESCENSO) >= z_descenso_obj else z_descenso_obj
+                
                 centro = memoria_caja['centro']
                 medio_ancho = memoria_caja['width'] / 2.0
                 tgt_x = centro[0] + (PROFUNDIDAD_CAJA_REAL / 2.0) - LONGITUD_MANO
 
                 if not robot.traj_l and not robot.traj_r:
-                    robot.set_targets(np.array([tgt_x, centro[1] + medio_ancho + 0.15, z_descenso_actual]), 
-                                      np.array([tgt_x, centro[1] - medio_ancho - 0.15, z_descenso_actual]))
+                    robot.set_targets(
+                        np.array([tgt_x, centro[1] + medio_ancho + 0.15, z_descenso_actual]), 
+                        np.array([tgt_x, centro[1] - medio_ancho - 0.15, z_descenso_actual])
+                    )
 
                 if z_descenso_actual <= z_descenso_obj + 0.005 or now - tiempo_estado > 7.0:
                     estado, tiempo_estado = "CERRAR_AGARRE", now
