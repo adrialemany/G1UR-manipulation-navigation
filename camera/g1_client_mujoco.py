@@ -4,6 +4,11 @@ import socket, threading, zmq, cv2, numpy as np
 from PIL import Image, ImageTk
 import time
 import os
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import CompressedImage
+
 
 # Configuración para el simulador local
 ROBOT_IP = '127.0.0.1'
@@ -12,6 +17,7 @@ CMD_PORT = 6000        # Puerto de comandos del puente/simulador
 
 class G1SimRemoteControl:
     def __init__(self, root):
+        
         self.root = root
         self.root.title("G1 Simulator Remote Control")
         self.root.geometry("800x700")
@@ -65,6 +71,7 @@ class G1SimRemoteControl:
         
         # Hilos secundarios
         threading.Thread(target=self.ping_loop, daemon=True).start()
+        self.latest_frame = None # Este atributo almacenará el último frame recibido para usarlo en el NODO de ROS2
         self.update_img()
 
     def ping_loop(self):
@@ -107,6 +114,7 @@ class G1SimRemoteControl:
             frame = cv2.imdecode(frame_np, cv2.IMREAD_COLOR)
 
             if frame is not None:
+                self.latest_frame = frame  # Guardar el último frame recibido para el nodo ROS2
                 # Convertir de BGR a RGB para Tkinter
                 img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(img)
@@ -123,6 +131,12 @@ class G1SimRemoteControl:
         
         # Llamar de nuevo después de ~30ms (aprox 30 FPS)
         self.root.after(30, self.update_img)
+    
+    def get_latest_frame(self):
+        """Devuelve el último frame recibido del simulador."""
+        return self.latest_frame
+        
+
 
     def send(self, cmd):
         """Envía comandos de texto al puente del simulador vía TCP."""
@@ -143,14 +157,78 @@ class G1SimRemoteControl:
         except:
             pass
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = G1SimRemoteControl(root)
+
+class G1SimNode(Node):
+    """Nodo de ROS2 que recibe comando de cmd_vel, y usa la función de enviar del GUI para transmitir al simulador."""
+    def __init__(self,send_function,latest_frame_function):
+        super().__init__('g1_sim_node')
+        self.get_logger().info("G1 Simulator Node Initialized")
+        self.subscription = self.create_subscription(Twist, "cmd_vel", self.cmd_callback, 10)
+        self.subscription  # Evitar advertencia de variable no utilizada
+        self.send_function = send_function
+        self.latest_frame_function = latest_frame_function
+        self.publisher = self.create_publisher(CompressedImage, '/simulation/image_compressed', 10)  
+        self.timer = self.create_timer(0.1, self.publish_image)  # Publicar cada 100ms, si no creo el timer no publica nada
+        
     
+    def publish_image(self):
+        """Publica un frame de imagen comprimida en el tópico ROS2."""
+        frame = self.latest_frame_function()  # Obtener el último frame pasado por función del GUI
+        if frame is None:
+            self.get_logger().warn("No frame received")
+            return  # No hay frame disponible
+        msg = CompressedImage()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.format = "jpeg"
+        msg.data = np.array(cv2.imencode('.jpg', frame)[1]).tobytes()
+
+        self.publisher.publish(msg)
+
+    "función de cmd_vel, cambiar para la sensibilidad"
+    def cmd_callback(self, msg):
+        linear_x = msg.linear.x
+        linear_y = msg.linear.y
+        angular_z = msg.angular.z
+        
+        if linear_x > 0:
+            command = 'w'
+        elif linear_x < 0:
+            command = 's'
+        elif angular_z > 0:
+            command = 'q'
+        elif angular_z < 0:
+            command = 'e'
+        elif linear_y > 0:
+            command = 'a'
+        elif linear_y < 0:
+            command = 'd'
+        else:
+            command = 'stop'
+        
+        # Enviar el comando al simulador
+        self.send_function(command)
+
+
+
+if __name__ == "__main__":
+    rclpy.init()
+
+    root = tk.Tk()
+
+    app = G1SimRemoteControl(root)
+
+    sim_node = G1SimNode(app.send,app.get_latest_frame) #este es el nodo de ROS2, que hereda la funcion de enviar datos
+
+    threading.Thread(
+        target=rclpy.spin,
+        args=(sim_node,),
+        daemon=True
+    ).start()
     def on_closing():
         app.alive = False
         root.destroy()
         os._exit(0)
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
+
     root.mainloop()
