@@ -1,6 +1,4 @@
 """
-vision_brain_real.py
-====================
 Brain para el robot real Unitree G1 (29 DOF). Aislando DDS con Multiprocessing.
 """
 
